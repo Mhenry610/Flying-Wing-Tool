@@ -1,0 +1,19 @@
+\contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.1}%
+\contentsline {chapter}{\numberline {2}Summary of Reviewed Sources}{2}{chapter.2}%
+\contentsline {chapter}{\numberline {3}Multi-Fidelity Preliminary Design and System-Level Coupling}{5}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Multi-fidelity MDO for conceptual design}{5}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Cross-tool comparison as verification}{6}{section.3.2}%
+\contentsline {chapter}{\numberline {4}Aerodynamic Analysis for UAS and Flying Wings}{8}{chapter.4}%
+\contentsline {section}{\numberline {4.1}What XFLR5 is designed to do (and what it is not)}{8}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Potential-flow solver comparison on a UAV configuration}{8}{section.4.2}%
+\contentsline {section}{\numberline {4.3}VSPAERO validation and mesh recommendations}{9}{section.4.3}%
+\contentsline {chapter}{\numberline {5}Flying-Wing Configuration, Stability, and Design Optimization}{11}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Optimization with explicit stability constraints}{11}{section.5.1}%
+\contentsline {chapter}{\numberline {6}Differentiable Analysis and Optimization-Oriented Tooling}{13}{chapter.6}%
+\contentsline {section}{\numberline {6.1}AeroSandbox and glass-box optimization requirements}{13}{section.6.1}%
+\contentsline {chapter}{\numberline {7}Mission Modeling, Interoperability, and Export}{15}{chapter.7}%
+\contentsline {chapter}{\numberline {8}Propulsion and Energy Storage Models}{16}{chapter.8}%
+\contentsline {section}{\numberline {8.1}A battery model that is simple but parameterizable}{16}{section.8.1}%
+\contentsline {chapter}{\numberline {9}Structural Sizing in Preliminary Design}{18}{chapter.9}%
+\contentsline {chapter}{\numberline {10}Synthesis: Requirements for a Useful Flying-Wing Design Tool}{19}{chapter.10}%
+\contentsline {chapter}{References}{20}{chapter*.2}%

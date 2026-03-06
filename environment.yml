@@ -1,0 +1,20 @@
+﻿name: fwt
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pythonocc-core
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - casadi
+  - pip
+  - pip:
+      - pyqt6
+      - aerosandbox
+      - neuralfoil
+      - ezdxf
+      - pyvista
+      - pyvistaqt
+      - vtk

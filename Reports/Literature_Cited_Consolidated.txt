@@ -1,0 +1,107 @@
+Flying Wing Tool - Consolidated Literature Cited
+Generated: 2026-02-27
+
+Scope scanned
+- reports/Project Proposal.tex
+- reports/Brief Writeup/FWT_V1-0_Functionality_Report.tex
+- reports/Poster/Poster.tex
+- physics/service modules with explicit "References" blocks
+
+==================================================================
+A) Literature Cited in Reports (explicit bibliography/citations)
+==================================================================
+
+1) Harris, C., et al. (2013). Multidisciplinary Unmanned Combat Air Vehicle (UCAV) System Design Using Multi-Fidelity Models. ResearchGate.
+   https://www.researchgate.net/publication/257511056
+
+2) Sharpe, P. D. (2021). AeroSandbox: A Differentiable Framework for Aircraft Design Optimization (Master's thesis). Massachusetts Institute of Technology.
+   https://dspace.mit.edu/handle/1721.1/140023
+
+3) Bowers, A. H., et al. (2023). Wake-Structure of the Prandtl-D. Aerospace Research Central.
+   https://arc.aiaa.org/doi/pdfplus/10.2514/6.2023-4003
+
+4) Lafifi, M. M. (2020). XFLR5 Analysis of foils and wings operating at low Reynolds numbers. ResearchGate.
+   https://www.researchgate.net/publication/348716216
+
+5) Sharpe, P. D. (2024). Accelerating Practical Engineering Design Optimization with Computational Graph Transformations (Ph.D. thesis). Massachusetts Institute of Technology.
+   https://dspace.mit.edu/handle/1721.1/157809
+
+6) Zhang, Y., et al. (2025). Aerodynamic Design Optimization for Flying Wing Gliders Based on the Combination of Artificial Neural Networks and Genetic Algorithms. MDPI.
+   https://www.mdpi.com/2226-4310/12/9/818
+
+7) Botero, E., et al. (2025). Current Capabilities and Challenges of NDARC and SUAVE for eVTOL Aircraft Design and Analysis. Stanford University.
+   https://suave.stanford.edu/publications
+
+8) Szabo, A., et al. (2022). Comparing Potential Flow Solvers for Aerodynamic Characteristics Estimation of the T-Flex UAV. International Council of the Aeronautical Sciences.
+   https://www.icas.org/icas_archive/ICAS2022/data/papers/ICAS2022_0367_paper.pdf
+
+9) Drela, M., and Youngren, H. (1988). AVL User Primer. MIT AeroAstro.
+
+10) TechScience. (2024). Validation of VSPAERO for Basic Wing Simulation. RIMNI.
+    https://cdn.techscience.cn/files/rimni/2024/online/RIMNI1012/TSP_RIMNI_56492/TSP_RIMNI_56492.pdf
+
+==================================================================
+B) Additional Literature Cited in Physics/Methods Code
+==================================================================
+
+11) Drela, M. First-Order DC Electric Motor Model.
+    (Referenced in services/propulsion/motor_model.py)
+
+12) Tremblay et al. A Generic Battery Model for EV Simulation.
+    (Referenced in services/propulsion/battery_model.py)
+
+13) Incropera, F. P., and DeWitt, D. P. Fundamentals of Heat and Mass Transfer.
+    (Referenced in services/propulsion/thermal_model.py)
+
+14) Roskam, J. Airplane Flight Dynamics and Automatic Flight Controls.
+    (Referenced in services/dynamics/landing_gear.py)
+
+15) Stevens, B. L., and Lewis, F. L. Aircraft Control and Simulation.
+    (Referenced in services/dynamics/aircraft_dynamics.py)
+
+16) Drela, M. Flight Vehicle Aerodynamics, Section 9.8.
+    (Referenced in services/dynamics/aircraft_dynamics.py)
+
+17) NACA TN-2661, Batdorf (1947).
+    (Referenced in services/structure.py)
+
+18) Kreisselmeier, G., and Steinhauser, R. (1979). Systematic control design by optimizing a vector performance index.
+    (Referenced in services/structure.py)
+
+19) Lekhnitskii (1968), Whitney (1987).
+    (Referenced in services/structure.py)
+
+20) NASA SP-8007. Buckling of Thin-Walled Circular Cylinders.
+    (Referenced in services/structure.py)
+
+21) Bruhn, E. F. Analysis and Design of Flight Vehicle Structures.
+    (Referenced in services/structure.py)
+
+22) Timoshenko, S. P., and Gere, J. M. Theory of Elastic Stability.
+    (Referenced in services/structure.py)
+
+23) von Karman, T., Sechler, E. E., and Donnell, L. H. (1932). The Strength of Thin Plates in Compression.
+    (Referenced in services/structure.py)
+
+24) Wagner, H. (1931). Flat Sheet Metal Girders with Very Thin Webs. NACA TM 604-606.
+    (Referenced in services/structure.py)
+
+25) Niu, M. C. Y. Airframe Structural Design.
+    (Referenced in services/structure.py)
+
+26) Megson, T. H. G. Aircraft Structures for Engineering Students.
+    (Referenced in services/structure.py)
+
+==================================================================
+C) Missing Physical-Method Citation Added
+==================================================================
+
+Identified gap:
+- reports/Brief Writeup/FWT_V1-0_Functionality_Report.tex includes Timoshenko beam equations in "Physical Methods Used" but has no citation in that report.
+
+Added supporting citation in this consolidated list:
+- Timoshenko, S. P., and Gere, J. M. Theory of Elastic Stability.
+
+Note:
+- This file is a consolidated reference document in reports/, as requested.
+- It does not alter LaTeX citation commands in existing report files.

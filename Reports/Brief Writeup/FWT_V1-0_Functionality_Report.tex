@@ -1,0 +1,636 @@
+﻿\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  keepspaces=true,
+  showstringspaces=false
+}
+
+\title{Flying Wing Tool\\Preliminary Design tool for flying wing aircraft}
+\author{Malik Henry}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The preliminary design of an aircraft is the stage where the major design decisions are refined and iterated into a cohesive overall configuration, establishing the final general layout before transitioning into detailed design. This phase focuses on aerodynamic, structural, and performance analysis while balancing the constraints and requirements until a final configuration is reached. The goal of this project is to consolidate these analyses for flying wing aircraft into a single framework that enables rapid iteration from early geometry choices to actionable insights moving into the detail design phase. 
+\end{abstract}
+
+\section{System Architecture Overview}
+\subsection{Main Layers}
+\begin{itemize}
+\item \textbf{GUI layer}: \texttt{app/} tabs and main window
+\item \textbf{Domain/state layer}: \texttt{core/} models and serialization
+\item \textbf{Service layer}: \texttt{services/} (analysis, propulsion, mission, structure, export)
+\item \textbf{Export/generator layer}: \texttt{core/*\_gen.py} and \texttt{services/export/}
+\end{itemize}
+
+\subsection{Primary Data Object}
+The program centers around \texttt{core.state.Project}, which contains:
+\begin{itemize}
+\item \texttt{wing} (planform, twist/trim parameters, airfoil interpolation, optimized twist),
+\item \texttt{mission} (segments/config + GUI settings),
+\item \texttt{analysis} (polars, metrics, structural and mission outputs).
+\end{itemize}
+
+
+\section{GUI Functionality}
+\subsection{Main Window}
+\texttt{app/main\_window.py} creates the tabbed shell and project lifecycle actions (new/open/save), and exposes a tool action for twist optimization.
+
+Tabs are:
+\begin{itemize}
+\item Geometry
+\item Analysis
+\item Mission
+\item Structure
+\item Export
+\end{itemize}
+
+\subsection{Geometry Tab Group}
+\texttt{app/tabs/geometry.py} includes sub-tabs for:
+\begin{itemize}
+\item planform and BWB/body-section editing,
+\item control-surface editing,
+\item twist/trim input and optimization trigger,
+\item airflow visualization trigger,
+\item airfoil interpolation/inspection,
+\item performance metrics and polar plotting.
+\end{itemize}
+
+\subsection{Analysis Tab}
+\texttt{app/tabs/analysis.py} provides airfoil sweep and contour plotting workflows, plus airfoil optimization calls through [\textbf{Note Optimization not fully implemented}] \texttt{services/aero\_analysis.py}.
+
+\subsection{Mission Tab}
+\texttt{app/tabs/mission.py} supports:
+\begin{itemize}
+\item sweep/batch mission operations,
+\item mission profile setup and simulation execution,
+\item phase statistics tables,
+\item JSBSim model export flow, [\textbf{While implemented persistent bugs are encountered still Work In Progress as this was a tacked on feature after the fact}]
+\end{itemize}
+
+\subsection{Structure Tab}
+\texttt{app/tabs/structure.py} includes:
+\begin{itemize}
+\item material and structural-parameter controls,
+\item structural analysis execution,
+\item buckling/twist/deflection visualization,
+\item structural optimization entry,
+\item PDF report export for structural results.
+\end{itemize}
+
+\subsection{Export Tab}
+\texttt{app/tabs/export.py} provides:
+\begin{itemize}
+\item Flow5 export,
+\item STEP export (including CFD wing and fixtures),
+\item DXF exports for ribs/spars/nested layouts with jointing to fit larger pieces on CNC,
+\item manufacturing split/nesting controls.
+\end{itemize}
+
+\section{Core Analysis and Modeling Services}
+\subsection{Geometry and Aerodynamics Service}
+\texttt{services/geometry.py} (\texttt{AeroSandboxService}) is the central aero/geometry engine. Major capabilities:
+\begin{itemize}
+\item build spanwise sections for classic flying-wing and BWB configurations,
+\item include control surfaces,
+\item compute design velocity and alpha estimates,
+\item generate target spanwise lift distributions (elliptical/bell logic),
+\item run twist optimization for trim/lift-distribution targets,
+\item run AeroBuildup and lifting-line analyses,
+\item compute mission-relevant performance metrics and polars,
+\item extract spanwise lift/moment distributions for structural loading,
+\item run aerostructural analyses using the structure service,
+\item build deformed wing geometry for visualization.
+\end{itemize}
+
+\subsection{Airfoil Analysis Service}
+\texttt{services/aero\_analysis.py} provides:
+\begin{itemize}
+\item robust airfoil loading (NACA generation, named/profile files, DAT parsing),
+\item NeuralFoil-based sweeps,
+\item optimization of Kulfan airfoil parameters with constraints on thickness, smoothness (wiggliness), confidence, and weighted objectives. [{\textbf{Not Fully Implemented}}]
+\end{itemize}
+
+\subsection{Aero Model Abstractions}
+\texttt{services/aero\_model.py} defines reusable aerodynamic model interfaces, including:
+\begin{itemize}
+\item precomputed grid-interpolated polar models,
+\item AD/stability-oriented model wrappers,
+\item rigid-body force/moment models used by mission/dynamics solvers.
+\end{itemize}
+
+\subsection{Mission Subsystem}
+\texttt{services/mission/} includes:
+\begin{itemize}
+\item mission schema and phase typing (\texttt{mission\_definition.py}),
+\item autopilot logic by phase (\texttt{autopilot.py}) [\textbf{Buggy but functional}],
+\item simulator orchestration and per-phase integration (\texttt{mission\_simulator.py}),
+\item 3-DOF derivatives and numerical integration support (\texttt{dynamics\_3dof.py}),
+\item ground-roll physics module (\texttt{ground\_roll.py}),
+\item legacy APC map/motor/sweep helpers for propeller-performance workflows.
+\end{itemize}
+
+In \texttt{MissionSimulator}, the selectable dynamics modes include \texttt{simple}, \texttt{3dof}, and \texttt{full}; the \texttt{full} path is currently a fallback/placeholder behavior rather than a fully separate implementation path.
+
+\subsection{Propulsion Subsystem}
+\texttt{services/propulsion/} provides a coupled propulsion chain:
+\begin{itemize}
+\item battery model with SOC-dependent OCV and resistance behavior,
+\item ESC power and thermal loss model,
+\item motor model (Drela-style analytical motor relations),
+\item propeller coefficient model(s) including pretrained surrogate support,
+\item thermal network for motor/ESC/battery,
+\item integrated equilibrium solver producing thrust, power, temperatures, and efficiency metrics, with multi-motor support.
+\end{itemize}
+
+Pretrained propeller models are expected in \texttt{data/propeller\_models/*.pkl}.
+
+\subsection{Structural Subsystem}
+\texttt{services/structure.py} is a large structural-analysis module implementing:
+\begin{itemize}
+\item wingbox section/material/stringer/rib data structures,
+\item beam analysis (including Timoshenko shear-deformation effects),
+\item skin/spar/rib buckling checks,
+\item stringer crippling and column-buckling checks,
+\item shear/torsion stress distribution in closed wingbox sections,
+\item post-buckling effective-width and load-redistribution logic,
+\item feasibility/margin aggregation,
+\item thickness/stringer optimization workflows.
+\end{itemize}
+
+\section{Export and Interoperability}
+\subsection{Geometry Builder}
+\texttt{services/export/geometry\_builder.py} is the central geometry construction module for CAD/export workflows. It supports building:
+\begin{itemize}
+\item skins,
+\item spars,
+\item ribs (including control-surface rib handling),
+\item stringers,
+\item wingbox skin,
+\item control-surface solids,
+\item fixtures and base plates.
+\end{itemize}
+
+\subsection{Target Formats}
+The codebase supports generation/export in multiple formats:
+\begin{itemize}
+\item XFLR5 / Flow5 XML plus DAT airfoils (\texttt{core/flow5\_gen.py})
+\item STEP and fixture geometry (\texttt{services/step\_export.py}, \texttt{services/export/step\_export.py})
+\item DXF rib/spar/nested manufacturing layouts (\texttt{services/export/dxf\_export.py})
+\item JSBSim configuration and FlightGear (\texttt{core/jsbsim\_gen.py} \texttt{core/flightgear\_gen.py})
+
+\end{itemize}
+
+\section{Physical Methods Used}
+
+\subsection{Variable Definitions (Nomenclature)}
+Table \ref{tab:nomenclature} defines the symbols used in the physical-method equations.
+Some symbols are context-dependent (for example \(\mu\) in aerodynamics vs.\ ground friction).
+
+\begin{longtable}{p{0.15\linewidth} p{0.50\linewidth} p{0.18\linewidth} p{0.12\linewidth}}
+\caption{Primary variables and constants used in this report.}\label{tab:nomenclature}\\
+\toprule
+\textbf{Symbol} & \textbf{Definition} & \textbf{Units} & \textbf{Context} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Symbol} & \textbf{Definition} & \textbf{Units} & \textbf{Context} \\
+\midrule
+\endhead
+\(\rho\) & Air density & kg/m\(^3\) & Aero/mission \\
+\(\mu\) & Dynamic viscosity of air (for Reynolds number) & Pa\(\cdot\)s & Aero \\
+\(g\) & Gravitational acceleration & m/s\(^2\) & Global \\
+\(V\) & True airspeed magnitude & m/s & Mission \\
+\(V_{air}\) & Effective airspeed in ground roll (\(V_{ground}+V_{headwind}\)) & m/s & Ground \\
+\(V_{ground}\) & Ground speed along runway or ENU magnitude & m/s & Mission/ground \\
+\(V_{wind,e}, V_{wind,n}\) & Wind components in East/North directions & m/s & Mission \\
+\(V_{headwind}\) & Headwind component along runway (positive = headwind) & m/s & Ground \\
+\(x,y,h\) & East, North, and altitude position states & m & Mission \\
+\(s_{ground}\) & Cumulative ground-track distance state & m & Mission \\
+\(\alpha\) & Angle of attack command/operating value & rad or deg & Aero/mission \\
+\(\gamma\) & Flight-path angle & rad or deg & Mission \\
+\(\chi\) & Track angle in horizontal plane & rad or deg & Mission \\
+\(\phi\) & Bank angle & rad or deg & Mission \\
+\(\beta_{brake}\) & Brake command ratio in \([0,1]\) & -- & Ground \\
+\(m\) & Vehicle mass & kg & Mission/structure \\
+\(W\) & Vehicle weight (\(W=mg\)) & N & Mission/ground \\
+\(q\) & Dynamic pressure (\(\tfrac12 \rho V^2\)) & Pa & Aero/mission \\
+\(S\) & Wing reference area & m\(^2\) & Aero/mission \\
+\(L\) & Lift force & N & Aero/mission \\
+\(D\) & Aerodynamic drag force & N & Aero/mission \\
+\(T\) & Net propulsive thrust force & N & Mission/propulsion \\
+\(N\) & Normal reaction force at gear (\(N=\max(0,W-L)\)) & N & Ground \\
+\(F_{friction}\) & Ground friction force & N & Ground \\
+\(\mu_{roll}, \mu_{brake}\) & Rolling and braking friction coefficients & -- & Ground \\
+\(n\) & Used in two contexts: load factor (\(L/W\)) and prop rev/s (\(\omega/2\pi\)) & -- or 1/s & Mission/prop \\
+\(\omega\) & Motor/prop angular speed & rad/s & Propulsion \\
+\(J\) & Propeller advance ratio (\(V/(nD_{prop})\)) & -- & Propulsion \\
+\(C_L, C_D\) & Lift and drag coefficients & -- & Aero \\
+\(C_T, C_P\) & Propeller thrust and power coefficients & -- & Propulsion \\
+\(Q_{prop}\) & Propeller shaft torque & N\(\cdot\)m & Propulsion \\
+\(D_{prop}\) & Propeller diameter & m & Propulsion \\
+\(K_e, K_t\) & Motor back-EMF and torque constants & V/(rad/s), N\(\cdot\)m/A & Propulsion \\
+\(R\) & Electrical resistance (motor or battery equivalent) & \(\Omega\) & Propulsion \\
+\(I\) & Electrical current & A & Propulsion \\
+\(I_0\) & Motor no-load current & A & Propulsion \\
+\(SOC\) & Battery state of charge (0 to 1) & -- & Propulsion/mission \\
+\(OCV\) & Battery open-circuit voltage & V & Propulsion \\
+\(V_{term}\) & Battery terminal voltage under load & V & Propulsion \\
+\(C_{Ah}\) & Battery capacity in amp-hours & Ah & Propulsion \\
+\(P_{prop},P_{shaft},P_{battery}\) & Propeller power, shaft power, battery power & W & Propulsion \\
+\(y\) & Spanwise coordinate in structural beam model & m & Structure \\
+\(q(y)\) & Distributed structural load per unit span & N/m & Structure \\
+\(V\) (structure) & Internal shear force in beam equations & N & Structure \\
+\(M\) & Internal bending moment & N\(\cdot\)m & Structure \\
+\(\psi\) & Bending rotation in Timoshenko theory & rad & Structure \\
+\(w\) & Transverse deflection & m & Structure \\
+\(\gamma\) (structure) & Shear strain in Timoshenko theory & -- & Structure \\
+\(EI\) & Bending stiffness distribution & N\(\cdot\)m\(^2\) & Structure \\
+\(GJ\) & Torsional stiffness distribution & N\(\cdot\)m\(^2\) & Structure \\
+\(\kappa_s\) & Shear correction factor & -- & Structure \\
+\(A_{enclosed}\) & Enclosed wingbox area for Bredt torsion & m\(^2\) & Structure \\
+\(t, t_{skin}, t_{spar}\) & Generic, skin, and spar-web thicknesses & m & Structure \\
+\(\sigma, \tau\) & Normal and shear stress & Pa & Structure \\
+\(\sigma_{cr}, \tau_{cr}\) & Critical buckling stresses (normal, shear) & Pa & Structure \\
+\(b_{eff}\) & Effective post-buckled skin width & m & Structure \\
+\(K\) & Effective column-length factor (Euler buckling) & -- & Structure \\
+\bottomrule
+\end{longtable}
+
+\subsection{Aerodynamics}
+The aerodynamic implementation uses both geometry-driven AeroSandbox analysis and low-order fallback models.
+The core force mapping uses dynamic pressure:
+\begin{align}
+q &= \tfrac{1}{2}\rho V^2, \\
+L &= q S C_L, \\
+D &= q S C_D.
+\end{align}
+
+When a full aero model is unavailable, the fallback polar in mission dynamics is:
+\begin{align}
+C_L &= C_{L0} + C_{L\alpha}\alpha, \\
+C_D &= C_{D0} + k C_L^2.
+\end{align}
+
+For spanwise target loading in \texttt{services/geometry.py}, the shape function is:
+\begin{align}
+f(\eta) &=
+\begin{cases}
+\sqrt{1-\eta^2} & \text{(elliptical)} \\
+\left(1-\eta^2\right)^{1.5} & \text{(bell / Prandtl-D)}
+\end{cases}
+\end{align}
+with scaling chosen to match the target global \(C_L\):
+\begin{align}
+C_{L,\text{section}}(\eta) = \text{scale}\cdot f(\eta), \quad
+\text{scale} = \frac{C_{L,\text{design}}S}{2\int_0^{b/2} f(y)c(y)\,dy}.
+\end{align}
+
+The local twist relation used for target shaping is:
+\begin{align}
+\theta_{\text{req}} \approx \frac{C_{L,\text{section}}}{C_{L\alpha,\text{section}}} + \alpha_{L=0,\text{section}}.
+\end{align}
+
+\begin{lstlisting}[language=Python,caption={Aerodynamic load and spanwise shaping logic}]
+# services/geometry.py
+if params.lift_distribution == "elliptical":
+    shape = [math.sqrt(max(0.0, 1 - s.span_fraction ** 2)) for s in sections]
+else:
+    shape = [max(0.0, 1 - s.span_fraction ** 2) ** 1.5 for s in sections]
+
+cl_design = scale * base_shape
+required_twist_absolute = cl_design / max(cl_alpha_section, 1e-6) + alpha_l0_section
+
+# services/mission/dynamics_3dof.py fallback polar + forces
+CL = config.CL0 + config.CLa * alpha_rad
+CD = config.CD0 + config.k * CL**2
+q = 0.5 * rho * V**2
+L = q * S * CL
+D = q * S * CD
+\end{lstlisting}
+
+\subsection{3-DOF Mission Dynamics}
+The implemented mission-oriented flight model uses states
+\((x, y, h, V, \gamma, \chi, \mathrm{SOC}, T_{motor}, T_{esc}, T_{battery}, s_{ground})\) and the canonical equations:
+\begin{align}
+\dot{V} &= \frac{T\cos\alpha - D}{m} - g\sin\gamma, \\
+\dot{\gamma} &= \frac{T\sin\alpha + L\cos\phi - mg\cos\gamma}{mV}, \\
+\dot{\chi} &= \frac{L\sin\phi}{mV\cos\gamma}, \\
+\dot{x} &= V\cos\gamma\sin\chi + V_{wind,e}, \\
+\dot{y} &= V\cos\gamma\cos\chi + V_{wind,n}, \\
+\dot{h} &= V\sin\gamma, \\
+n &= \frac{L}{mg}.
+\end{align}
+
+Turn response is limited using:
+\begin{align}
+\phi &= \mathrm{clip}(\phi_{cmd},-\phi_{max},\phi_{max}), \\
+\phi &\le \arccos\left(\frac{1}{n_{max}}\right)\ \text{if } n_{max}\text{ is set.}
+\end{align}
+Wind is represented in ENU components and directly added to air-relative velocity for kinematics.
+
+\begin{lstlisting}[language=Python,caption={3-DOF derivative implementation}]
+# services/mission/dynamics_3dof.py
+dV_dt = (T * np.cos(alpha_thrust) - D) / m - g * np.sin(gamma_rad)
+dgamma_dt_rad = (T * np.sin(alpha_thrust) + L * np.cos(bank_rad) - W * np.cos(gamma_rad)) / (m * V)
+dchi_dt_rad = (L * np.sin(bank_rad)) / (m * V * cos_gamma)
+
+V_air_east = V * cos_gamma * np.sin(track_rad)
+V_air_north = V * cos_gamma * np.cos(track_rad)
+dx_dt = V_air_east + wind_east
+dy_dt = V_air_north + wind_north
+dh_dt = V * np.sin(gamma_rad)
+\end{lstlisting}
+
+\subsection{Ground Roll and Transition Physics}
+In \texttt{services/mission/ground\_roll.py}, the along-runway 1-DOF model uses:
+\begin{align}
+V_{air} &= V_{ground} + V_{headwind}, \\
+L &= \tfrac{1}{2}\rho V_{air}^2 S C_{L,ground}, \\
+N &= \max(0, W-L), \\
+\mu &= \mu_{roll}(1-\beta_{brake}) + \mu_{brake}\beta_{brake}, \\
+F_{friction} &= \mu N.
+\end{align}
+
+Takeoff and landing longitudinal acceleration:
+\begin{align}
+\dot{V}_{ground} &=
+\begin{cases}
+\dfrac{T-D-F_{friction}}{m} & \text{takeoff} \\
+-\dfrac{D+F_{friction}}{m} & \text{landing}
+\end{cases}
+\end{align}
+
+liftoff logic:
+\begin{align}
+V_{air} \ge V_{rot}
+\ \land\
+\left(N \le N_{thresh}\ \lor\ L \ge 0.95W\right).
+\end{align}
+
+\begin{lstlisting}[language=Python,caption={Ground roll force balance and liftoff checks}]
+# services/mission/ground_roll.py
+V_air = max(0.1, V_ground + headwind)
+q = 0.5 * rho * V_air**2
+L = q * S * CL
+N = max(0.0, W - L)
+mu = ground_config.mu_roll * (1.0 - brake) + ground_config.mu_brake * brake
+F_friction = mu * N
+
+if is_landing:
+    accel = -(D + F_friction) / m
+else:
+    accel = (T - D - F_friction) / m
+\end{lstlisting}
+
+\subsection{Propulsion Physics}
+The integrated chain is battery \(\rightarrow\) ESC \(\rightarrow\) motor \(\rightarrow\) propeller, with equilibrium solved at each time step.
+
+Propeller nondimensional relations:
+\begin{align}
+n &= \frac{\omega}{2\pi}, \quad
+J = \frac{V}{nD}, \\
+T &= C_T \rho n^2 D^4, \\
+P_{prop} &= C_P \rho n^3 D^5, \\
+Q_{prop} &= \frac{P_{prop}}{\omega}.
+\end{align}
+
+Motor (Drela-style BLDC model):
+\begin{align}
+V_{motor} &= K_e\omega + IR, \\
+\tau_{motor} &= K_t (I - I_0), \\
+P_{shaft} &= \tau_{motor}\omega.
+\end{align}
+
+Battery model:
+\begin{align}
+V_{term} &= OCV(SOC) - I R(SOC,T), \\
+\dot{SOC} &= -\frac{I}{3600\,C_{Ah}}, \\
+\dot{Q}_{battery} &= I^2R.
+\end{align}
+
+The propulsion system solves \(\tau_{motor}(\omega)=\tau_{prop}(\omega)\) by bounded iteration and updates loaded battery voltage consistently.
+
+\begin{lstlisting}[language=Python,caption={Coupled propulsion equilibrium and battery dynamics}]
+# services/propulsion/propulsion_system.py
+omega_low = 0.0
+omega_high = omega_limit
+for _ in range(max(1, n_iterations)):
+    omega = (omega_low + omega_high) / 2.0
+    tau_prop = self.config.propeller.get_torque(V_freestream, omega, rho)
+    I_motor = (V_motor_cmd - self.motor_model.Ke * omega) / self.motor_model.R
+    tau_motor = (I_motor - self.motor_model.I0) * self.motor_model.Kt
+    if tau_motor > tau_prop:
+        omega_low = omega
+    else:
+        omega_high = omega
+
+# services/propulsion/battery_model.py
+V_terminal = OCV - I_discharge * R
+dSOC_dt = -I_discharge / (3600 * self.pack.capacity_Ah)
+Q_heat = I_discharge**2 * R
+\end{lstlisting}
+
+\subsection{Structural Mechanics}
+The structural implementation combines beam theory, closed-section torsion, buckling, and post-buckling checks.
+
+Timoshenko beam field equations:
+\begin{align}
+\frac{dV}{dy} &= -q(y), \\
+\frac{dM}{dy} &= V, \\
+\kappa_b &= \frac{M}{EI}, \\
+\gamma &= \frac{V}{\kappa_s G A}, \\
+\frac{dw}{dy} &= \psi + \gamma.
+\end{align}
+The shear stiffness uses:
+\begin{align}
+\kappa_s G A \approx \kappa_s G_{spar}\left(2 h t_{spar}\right).
+\end{align}
+
+Closed wingbox torsional shear (Bredt):
+\begin{align}
+q_t = \frac{T}{2A_{enclosed}}, \quad
+\tau_t = \frac{q_t}{t}.
+\end{align}
+
+Orthotropic skin compressive buckling uses plate stiffnesses \(D_{11},D_{22},D_{12},D_{66}\):
+\begin{align}
+N_{cr}(m)=\frac{\pi^2}{b^2}\left[D_{11}\left(\frac{mb}{a}\right)^2 + 2(D_{12}+2D_{66}) + D_{22}\left(\frac{a}{mb}\right)^2\right], \\
+\sigma_{cr}=\frac{\min_m N_{cr}(m)}{t}.
+\end{align}
+
+Spar web shear buckling (isotropic form used in symbolic path):
+\begin{align}
+\tau_{cr}=k_s\frac{\pi^2E}{12(1-\nu^2)}\left(\frac{t}{h}\right)^2.
+\end{align}
+
+Stringer and post-buckling relations:
+\begin{align}
+\sigma_{Euler} &= \frac{\pi^2 E I}{A (K L)^2}, \\
+\sigma_{allow} &= \min(\sigma_{crippling}, \sigma_{Euler}, \sigma_{yield}), \\
+b_{eff} &= b\sqrt{\frac{\sigma_{cr}}{\sigma_{applied}}}\quad(\sigma_{applied}>\sigma_{cr}).
+\end{align}
+
+\begin{lstlisting}[language=Python,caption={Key structural equations as implemented}]
+# services/structure.py (Timoshenko + torsion)
+gamma = V / (kappa_GA + 1e-10)
+curvature = M / (EI + 1e-10)
+q_torsion = torque / (2 * A_enclosed + 1e-10)
+tau_torsion_front = q_torsion / (t_front + 1e-10)
+
+# services/structure.py (buckling + stringer)
+tau_cr = k_shear * (np.pi**2 * E) / (12 * (1 - nu**2)) * (t / h)**2
+sigma_euler = np.pi**2 * E * I / (A * L_eff**2)
+b_eff = b * np.sqrt(sigma_cr / sigma_applied)
+\end{lstlisting}
+
+The current aerostructural workflow is one-way by default: aerodynamic loads drive the structure, and the deformed structure is not iterated back into a fully coupled loop in the default path.
+
+\section{Data Inputs and Outputs}
+\subsection{Inputs}
+Typical user/model inputs include:
+\begin{itemize}
+\item planform and geometry parameters,
+\item airfoil definitions/interpolation,
+\item control-surface definitions,
+\item structural material and thickness settings,
+\item propulsion system parameters,
+\item mission phases/environment/runway settings.
+\end{itemize}
+
+\subsection{Outputs}
+Outputs include:
+\begin{itemize}
+\item aerodynamic polars and performance metrics,
+\item optimized twist distributions,
+\item structural margins and deformation fields,
+\item mission energy/range/endurance and phase statistics,
+\item exported CAD/simulation files (CPACS/Flow5/STEP/DXF/JSBSim/FlightGear artifacts).
+\end{itemize}
+
+\section{Visual Validation Placeholders}
+This section is intentionally a template. Replace each placeholder box with your actual screenshot or CAD image for visual validation.
+
+\subsection{UI Tab Screenshots}
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox[c][0.23\textheight][c]{0.92\linewidth}{\centering
+Placeholder: Geometry tab screenshot\\
+Suggested file: \texttt{assets/screenshots/ui\_geometry\_tab.png}
+}}
+\caption{Geometry tab screenshot placeholder.}
+\label{fig:ui-geometry-tab}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox[c][0.23\textheight][c]{0.92\linewidth}{\centering
+Placeholder: Analysis tab screenshot\\
+Suggested file: \texttt{assets/screenshots/ui\_analysis\_tab.png}
+}}
+\caption{Analysis tab screenshot placeholder.}
+\label{fig:ui-analysis-tab}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox[c][0.23\textheight][c]{0.92\linewidth}{\centering
+Placeholder: Mission tab screenshot\\
+Suggested file: \texttt{assets/screenshots/ui\_mission\_tab.png}
+}}
+\caption{Mission tab screenshot placeholder.}
+\label{fig:ui-mission-tab}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox[c][0.23\textheight][c]{0.92\linewidth}{\centering
+Placeholder: Structure tab screenshot\\
+Suggested file: \texttt{assets/screenshots/ui\_structure\_tab.png}
+}}
+\caption{Structure tab screenshot placeholder.}
+\label{fig:ui-structure-tab}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox[c][0.23\textheight][c]{0.92\linewidth}{\centering
+Placeholder: Export tab screenshot\\
+Suggested file: \texttt{assets/screenshots/ui\_export\_tab.png}
+}}
+\caption{Export tab screenshot placeholder.}
+\label{fig:ui-export-tab}
+\end{figure}
+
+\subsection{CAD Model Photos for Validation}
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox[c][0.26\textheight][c]{0.92\linewidth}{\centering
+Placeholder: CAD isometric overview\\
+Suggested file: \texttt{assets/cad/cad\_iso\_overview.png}
+}}
+\caption{CAD isometric overview placeholder for global geometry validation.}
+\label{fig:cad-iso-overview}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox[c][0.26\textheight][c]{0.92\linewidth}{\centering
+Placeholder: CAD structural detail (ribs/spars/wingbox)\\
+Suggested file: \texttt{assets/cad/cad\_structure\_detail.png}
+}}
+\caption{CAD structural detail placeholder for wingbox and internal feature validation.}
+\label{fig:cad-structure-detail}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox[c][0.26\textheight][c]{0.92\linewidth}{\centering
+Placeholder: CAD control-surface or manufacturing split view\\
+Suggested file: \texttt{assets/cad/cad\_control\_surfaces\_or\_split.png}
+}}
+\caption{CAD control-surface/split placeholder for manufacturability and interface validation.}
+\label{fig:cad-control-split}
+\end{figure}
+
+\section{Current Implementation Notes and Constraints}
+\begin{itemize}
+\item The CLI path is not yet implemented.
+\item Mission \texttt{full} dynamics mode currently routes to simpler behavior in simulator logic.
+\item Structural-aerodynamic coupling is one-way by default, with robust fallback behavior.
+\item Export/CAD paths depend on the OCC stack and environment setup (Conda + \texttt{pythonocc-core}).
+\item Propulsion surrogate assets in \texttt{data/propeller\_models} are required for full model fidelity.
+\end{itemize}
+
+\section{Future Work / Room for Improvement}
+\begin{itemize}
+\item Implement a production CLI workflow so GUI, CLI, and batch modes share the same analysis pipeline and result schema.
+\item Complete a true \texttt{full} mission-dynamics path, rather than routing to simplified behavior in fallback cases.
+\item Add iterative two-way aero-structural coupling as a first-class mode, with convergence controls and traceable stopping criteria.
+\item Expand verification and validation: regression tests for mission/propulsion/structure outputs, unit-consistency checks, and benchmark cases with locked reference results.
+\item Improve uncertainty handling by reporting sensitivity bands for key outputs (range, endurance, margins) against aerodynamic, propulsion, and material assumptions.
+\item Harden propulsion model management by adding surrogate versioning, model metadata checks, and fallback diagnostics when model files are missing or out of range.
+\item Strengthen data contracts across services (typed interfaces, explicit units, schema checks) to reduce silent coupling errors between modules.
+\item Improve report/export reproducibility by embedding configuration fingerprints (code version, solver settings, key inputs) directly in generated outputs.
+\end{itemize}
+
+\section{Conclusion}
+\texttt{FWT\_V1-0} is a multi-domain flying-wing engineering tool with a practical architecture: GUI-driven configuration over a strong service layer, shared project state, and broad export support. The codebase already integrates substantial physics depth in aerodynamics, mission dynamics, propulsion, and structural checks, while preserving extensibility for tighter future coupling and higher-fidelity simulation paths.
+
+\end{document}

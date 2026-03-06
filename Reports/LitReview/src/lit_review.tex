@@ -1,0 +1,49 @@
+\documentclass[12pt]{report}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage[hidelinks]{hyperref}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+
+\onehalfspacing
+
+\begin{document}
+
+% Cover page (not counted)
+\begin{titlepage}
+  \centering
+  {\Large\bfseries Literature Review\par}
+  \vspace{0.25in}
+  {\large\bfseries Preliminary Design Tool for Flying Wing Unmanned Aerial Systems\par}
+  \vspace{1.0in}
+  {\large Malik D. Henry\par}
+  \vspace{0.25in}
+  {\large Master of Science, Mechanical Engineering\par}
+  \vspace{0.25in}
+  {\large Thesis Literature Review\par}
+  \vfill
+  {\large Advisor: John P. Kizito\par}
+  \vspace{0.15in}
+  {\large North Carolina Agricultural and Technical State University\par}
+  \vspace{0.15in}
+  {\large 2026\par}
+\end{titlepage}
+
+% Front matter (TOC not counted)
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+
+% Main matter (counts)
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\input{body.tex}
+\clearpage
+\input{references.tex}
+
+\end{document}

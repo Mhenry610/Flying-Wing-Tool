@@ -1,0 +1,207 @@
+% !TEX program = xelatex
+% !TEX program = xelatex
+\documentclass[20pt]{extarticle}
+\usepackage[paperwidth=48in,paperheight=36in,margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{multicol}
+\usepackage{array}
+\usepackage{helvet}
+\usepackage{anyfontsize}
+\usepackage{iftex}
+\ifPDFTeX
+  \newcommand{\collegefont}{\fontfamily{phv}\selectfont}
+\else
+  \usepackage{fontspec}
+  \IfFileExists{Libre-Bodoni/fonts/OTF/LibreBodoni-Regular.otf}{%
+    \newfontfamily{\collegefont}{LibreBodoni}[
+      Path=Libre-Bodoni/fonts/OTF/,
+      Extension=.otf,
+      UprightFont=*-Regular,
+      ItalicFont=*-Italic,
+      BoldFont=*-Bold,
+      BoldItalicFont=*-BoldItalic
+    ]
+  }{%
+    \IfFontExistsTF{Libre Bodoni Bold Italic}
+      {\newfontfamily{\collegefont}{Libre Bodoni Bold Italic}}
+      {\newfontfamily{\collegefont}{TeX Gyre Pagella}}
+  }
+\fi
+\renewcommand{\familydefault}{\sfdefault}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.75\baselineskip}
+
+\definecolor{prismblue}{HTML}{034684}
+\definecolor{prismorange}{HTML}{FFC000}
+\definecolor{lightgray}{HTML}{F4F5F7}
+
+\newcommand{\sectionbar}[1]{%
+  \colorbox{prismblue}{%
+    \parbox[c][0.5in][c]{\dimexpr\linewidth-2\fboxsep\relax}{%
+      \hspace{0.4em}\color{white}\bfseries\fontsize{54}{60}\selectfont #1%
+    }%
+  }%
+  \vspace{0.4\baselineskip}%
+}
+
+\newcommand{\imageplaceholder}[2]{%
+  \fcolorbox{prismblue}{lightgray}{%
+    \parbox[c][#2][c]{\dimexpr#1-2\fboxsep-2\fboxrule\relax}{%
+      \centering\bfseries Image Placeholder%
+    }%
+  }%
+}
+
+\begin{document}
+\pagestyle{empty}
+\fontsize{32}{38}\selectfont
+\sloppy
+
+% Header
+\begin{minipage}[t]{0.18\linewidth}
+  \vspace{0pt}
+  \centering
+  \includegraphics[width=0.35\linewidth]{NC_A&T_Logo_Icon_2C.png}
+  \vspace{0.4\baselineskip}
+
+\end{minipage}\hfill
+\begin{minipage}[t]{0.62\linewidth}
+  \vspace{0pt}
+  \centering
+  {\Huge\bfseries Preliminary Design Tool for Flying Wing Unmanned Aerial Systems\par}
+  \vspace{0.6\baselineskip}
+  {\Large Malik Henry\par}
+  {\large North Carolina A\&T State University\par}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.18\linewidth}
+  \vspace{0pt}
+  \vspace*{5.6in}
+\end{minipage}
+
+\vspace{1\baselineskip}
+
+% Body
+\begin{minipage}[t]{0.62\linewidth}
+  \vspace{0pt}
+  \sectionbar{Abstract}
+  The preliminary design of an aircraft is the stage where the major design decisions are
+  refined and iterated into a cohesive overall configuration, establishing the final general layout
+  before transitioning into detailed design. This phase focuses on aerodynamic, structural, and
+  performance analysis while balancing the constraints and requirements until a final configuration
+  is reached. The goal of this project is to consolidate these analyses for flying wing aircraft into a
+  single framework that enables rapid iteration from early geometry choices to actionable insights
+  moving into the detail design phase.
+
+  \sectionbar{Problem and Scope}
+  Early design work usually gets split across several tools for geometry, analysis, and
+  manufacturing prep. This project brings those steps into one GUI workflow for flying-wing
+  concepts so early trade studies can be done in a single environment.
+
+  \sectionbar{Implementation Approach}
+  \textbf{Core architecture:}
+  \begin{itemize}
+    \item GUI layer: Geometry, Analysis, Mission, Structure, and Export tabs.
+    \item Shared project state: one serialized model for wing, mission, and outputs.
+    \item Service layer: aero/geometry, mission dynamics, propulsion, structure, and export.
+    \item Batch entrypoint: \texttt{run\_full\_analysis.py} for repeatable offline analysis.
+  \end{itemize}
+
+  \textbf{Analysis pipeline currently used:}
+  \begin{itemize}
+    \item Define planform, airfoils, control surfaces, and twist/trim targets.
+    \item Compute performance metrics and aerodynamic polars.
+    \item Run mission phases (ground roll, climb, cruise, descent, landing).
+    \item Evaluate structural response with beam, stress, and buckling checks.
+    \item Export artifacts for analysis and manufacturing (Flow5, STEP, DXF, JSBSim assets).
+  \end{itemize}
+
+  \vspace{0.5\baselineskip}
+  \begin{minipage}[t]{0.49\linewidth}
+    \vspace{0pt}
+    \includegraphics[width=\linewidth,height=5.5in,keepaspectratio]{GeometryTab.png}
+    \vspace{0.15\baselineskip}
+    {\small Geometry tab: planform and wing setup workflow.}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\linewidth}
+    \vspace{0pt}
+    \includegraphics[width=\linewidth,height=5.5in,keepaspectratio]{AnalysisTab.png}
+    \vspace{0.15\baselineskip}
+    {\small Analysis tab: aerodynamic sweep and post-processing views.}
+  \end{minipage}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.35\linewidth}
+  \vspace{0pt}
+  \sectionbar{Capability Snapshot}
+  \begin{tabular}{|>{\raggedright\arraybackslash}p{0.46\linewidth}|>{\raggedright\arraybackslash}p{0.18\linewidth}|>{\raggedleft\arraybackslash}p{0.22\linewidth}|}
+    \hline
+    \textbf{Module} & \textbf{State} & \textbf{Notes} \\
+    \hline
+    Geometry & Active & Planform + twist \\
+    \hline
+    Analysis & Partial & Airfoil opt WIP \\
+    \hline
+    Mission & Partial & Full mode fallback \\
+    \hline
+    Structure & Active & Buckling checks \\
+    \hline
+    Export & Partial & JSBSim debug \\
+    \hline
+    Batch run & Active & JSON pipeline \\
+    \hline
+    \textbf{Scope} & & \textbf{End-to-end} \\
+    \hline
+  \end{tabular}
+
+  \vspace{0.6\baselineskip}
+  \includegraphics[width=\linewidth,height=5.0in,keepaspectratio]{CAD Isometric.png}
+  \vspace{0.15\baselineskip}
+  {\small CAD output used for configuration and manufacturability checks.}
+
+  \sectionbar{Results}
+  \includegraphics[width=\linewidth,height=3.0in,keepaspectratio]{MissionTab.png}
+  \vspace{0.4\baselineskip}
+  \includegraphics[width=\linewidth,height=3.0in,keepaspectratio]{StructuresTab.png}
+
+  \sectionbar{Current Gaps}
+  \begin{itemize}
+    \item Complete the full mission-dynamics path (currently a simplified fallback path).
+    \item Improve reliability of JSBSim export and mission autopilot edge cases.
+    \item Add stronger regression testing for mission, structure, and propulsion outputs.
+    \item Extend aero-structural coupling beyond the current one-way default path.
+  \end{itemize}
+
+  \sectionbar{Conclusion}
+  The current build shows a workable single-workspace flow for flying-wing preliminary
+  design. Next work is centered on mission/export reliability and stronger verification so
+  design-study results are easier to reproduce.
+
+  \sectionbar{References}
+  {\fontsize{19}{23}\selectfont
+  \begin{itemize}
+    \item Sharpe, P. D. (2021). \textit{AeroSandbox: A Differentiable Framework for Aircraft Design Optimization}. MIT.
+    \item Sharpe, P. D. (2024). \textit{Accelerating Practical Engineering Design Optimization with Computational Graph Transformations}. MIT.
+    \item Bowers, A. H., et al. (2023). \textit{Wake-Structure of the Prandtl-D}. AIAA ARC.
+    \item Drela, M., and Youngren, H. (1988). \textit{AVL User Primer}. MIT AeroAstro.
+    \item Stevens, B. L., and Lewis, F. L. \textit{Aircraft Control and Simulation}.
+    \item Timoshenko, S. P., and Gere, J. M. \textit{Theory of Elastic Stability}.
+  \end{itemize}
+  }
+\end{minipage}
+
+\vfill
+
+% Footer
+\colorbox{prismorange}{%
+  \parbox[c][1in][c]{\dimexpr\linewidth-2\fboxsep\relax}{%
+    \vfil
+    \centering{%
+      \collegefont\color{prismblue}\fontsize{42}{48}\selectfont
+      \textbf{North Carolina Agricultural and Technical State University} \textbullet\ College of Engineering Department of Mechanical Engineering\par
+    }
+    \vfil
+  }%
+}
+
+\end{document}
