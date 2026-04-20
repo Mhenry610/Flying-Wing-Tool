@@ -22,6 +22,11 @@ Reports/Poster/pptx_build/
 Reports/Presentation/fwt_thesis_defense_work/
 Reports/Presentation/rendered_check_com/
 
+# Local reports and X-48 case files
+/Reports/
+/x-48 setup/
+/X48_10ft_Approx_FWT.json
+
 # BARAM CFD artifacts
 /BARAM/geometry_exports/
 /BARAM/studies/
