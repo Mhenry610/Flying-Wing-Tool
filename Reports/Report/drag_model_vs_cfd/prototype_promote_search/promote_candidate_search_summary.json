@@ -1,0 +1,1622 @@
+{
+  "searched_variant_count": 1620,
+  "top_ranked_variants": [
+    {
+      "variant": {
+        "region_mode": "chord_0.55",
+        "onset_floor": 0.15,
+        "onset_power": 2.0,
+        "root_power": 0.5,
+        "cap_fraction": 0.95,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991384
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.38703022707799467,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297468,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.002083610248294121,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.26922241696819155,
+          "body_symmetric_relief_CL": -0.26922241696819155
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.0,
+        "root_power": 0.5,
+        "cap_fraction": 0.8,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.0,
+        "root_power": 0.5,
+        "cap_fraction": 0.95,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.0,
+        "root_power": 1.0,
+        "cap_fraction": 0.8,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.0,
+        "root_power": 1.0,
+        "cap_fraction": 0.95,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.0,
+        "root_power": 2.0,
+        "cap_fraction": 0.8,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.0,
+        "root_power": 2.0,
+        "cap_fraction": 0.95,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.5,
+        "root_power": 0.5,
+        "cap_fraction": 0.8,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.5,
+        "root_power": 0.5,
+        "cap_fraction": 0.95,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.5,
+        "root_power": 1.0,
+        "cap_fraction": 0.8,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.5,
+        "root_power": 1.0,
+        "cap_fraction": 0.95,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.5,
+        "root_power": 2.0,
+        "cap_fraction": 0.8,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 1.5,
+        "root_power": 2.0,
+        "cap_fraction": 0.95,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 2.0,
+        "root_power": 0.5,
+        "cap_fraction": 0.8,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 2.0,
+        "root_power": 0.5,
+        "cap_fraction": 0.95,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 2.0,
+        "root_power": 1.0,
+        "cap_fraction": 0.8,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 2.0,
+        "root_power": 1.0,
+        "cap_fraction": 0.95,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 2.0,
+        "root_power": 2.0,
+        "cap_fraction": 0.8,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.15,
+        "onset_power": 2.0,
+        "root_power": 2.0,
+        "cap_fraction": 0.95,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    },
+    {
+      "variant": {
+        "region_mode": "chord_0.70",
+        "onset_floor": 0.3,
+        "onset_power": 1.0,
+        "root_power": 0.5,
+        "cap_fraction": 0.8,
+        "target_scale": 1.0,
+        "camber_scale": 0.96,
+        "alpha_break_factor": 0.096,
+        "symmetric_drag_floor": 0.205,
+        "cambered_drag_alpha_gain": 1.8,
+        "symmetric_form_drag_gain": 2.2
+      },
+      "scores": {
+        "max_rel_error": 0.012254102926460616,
+        "mean_rel_error": 0.0031680780792991566
+      },
+      "results": [
+        {
+          "dataset": "x48_10ft",
+          "condition": "cruise",
+          "model_CL": 0.15584096401172648,
+          "model_CD": 0.010031184120325595,
+          "cfd_CL": 0.1559206579013886,
+          "cfd_CD": 0.010007955175231063,
+          "rel_CL_error": 0.0005111182234269152,
+          "rel_CD_error": 0.002321048075037564,
+          "delta_CL": -7.969388966211355e-05,
+          "delta_CD": 2.3228945094532286e-05,
+          "body_delta_CL": 0.08217872891795812,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "x48_10ft",
+          "condition": "takeoff",
+          "model_CL": 0.1932882151471658,
+          "model_CD": 0.02604639453179205,
+          "cfd_CL": 0.1935724233294682,
+          "cfd_CD": 0.02602059475743992,
+          "rel_CL_error": 0.0014682266069411625,
+          "rel_CD_error": 0.0009915136295933719,
+          "delta_CL": -0.0002842081823024034,
+          "delta_CD": 2.579977435212752e-05,
+          "body_delta_CL": -0.02149118509593383,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "cruise",
+          "model_CL": 0.28848843432967164,
+          "model_CD": 0.026912215055230754,
+          "cfd_CL": 0.2920674590341459,
+          "cfd_CD": 0.026849819888917242,
+          "rel_CL_error": 0.012254102926460616,
+          "rel_CD_error": 0.002323857909351047,
+          "delta_CL": -0.003579024704474243,
+          "delta_CD": 6.239516631351139e-05,
+          "body_delta_CL": -1.2675366117429173e-16,
+          "body_symmetric_relief_CL": 0.0
+        },
+        {
+          "dataset": "intendedvalidation2",
+          "condition": "takeoff",
+          "model_CL": 0.3870302270779947,
+          "model_CD": 0.023448074531343222,
+          "cfd_CL": 0.38494661682970055,
+          "cfd_CD": 0.02344952915434802,
+          "rel_CL_error": 0.005412725186297612,
+          "rel_CD_error": 6.203207728496188e-05,
+          "delta_CL": 0.0020836102482941765,
+          "delta_CD": -1.4546230047984832e-06,
+          "body_delta_CL": -0.2692224169681915,
+          "body_symmetric_relief_CL": -0.2692224169681915
+        }
+      ]
+    }
+  ],
+  "best": {
+    "variant": {
+      "region_mode": "chord_0.55",
+      "onset_floor": 0.15,
+      "onset_power": 2.0,
+      "root_power": 0.5,
+      "cap_fraction": 0.95,
+      "target_scale": 1.0,
+      "camber_scale": 0.96,
+      "alpha_break_factor": 0.096,
+      "symmetric_drag_floor": 0.205,
+      "cambered_drag_alpha_gain": 1.8,
+      "symmetric_form_drag_gain": 2.2
+    },
+    "scores": {
+      "max_rel_error": 0.012254102926460616,
+      "mean_rel_error": 0.0031680780792991384
+    },
+    "results": [
+      {
+        "dataset": "x48_10ft",
+        "condition": "cruise",
+        "model_CL": 0.15584096401172648,
+        "model_CD": 0.010031184120325595,
+        "cfd_CL": 0.1559206579013886,
+        "cfd_CD": 0.010007955175231063,
+        "rel_CL_error": 0.0005111182234269152,
+        "rel_CD_error": 0.002321048075037564,
+        "delta_CL": -7.969388966211355e-05,
+        "delta_CD": 2.3228945094532286e-05,
+        "body_delta_CL": 0.08217872891795812,
+        "body_symmetric_relief_CL": 0.0
+      },
+      {
+        "dataset": "x48_10ft",
+        "condition": "takeoff",
+        "model_CL": 0.1932882151471658,
+        "model_CD": 0.02604639453179205,
+        "cfd_CL": 0.1935724233294682,
+        "cfd_CD": 0.02602059475743992,
+        "rel_CL_error": 0.0014682266069411625,
+        "rel_CD_error": 0.0009915136295933719,
+        "delta_CL": -0.0002842081823024034,
+        "delta_CD": 2.579977435212752e-05,
+        "body_delta_CL": -0.02149118509593383,
+        "body_symmetric_relief_CL": 0.0
+      },
+      {
+        "dataset": "intendedvalidation2",
+        "condition": "cruise",
+        "model_CL": 0.28848843432967164,
+        "model_CD": 0.026912215055230754,
+        "cfd_CL": 0.2920674590341459,
+        "cfd_CD": 0.026849819888917242,
+        "rel_CL_error": 0.012254102926460616,
+        "rel_CD_error": 0.002323857909351047,
+        "delta_CL": -0.003579024704474243,
+        "delta_CD": 6.239516631351139e-05,
+        "body_delta_CL": -1.2675366117429173e-16,
+        "body_symmetric_relief_CL": 0.0
+      },
+      {
+        "dataset": "intendedvalidation2",
+        "condition": "takeoff",
+        "model_CL": 0.38703022707799467,
+        "model_CD": 0.023448074531343222,
+        "cfd_CL": 0.38494661682970055,
+        "cfd_CD": 0.02344952915434802,
+        "rel_CL_error": 0.005412725186297468,
+        "rel_CD_error": 6.203207728496188e-05,
+        "delta_CL": 0.002083610248294121,
+        "delta_CD": -1.4546230047984832e-06,
+        "body_delta_CL": -0.26922241696819155,
+        "body_symmetric_relief_CL": -0.26922241696819155
+      }
+    ]
+  }
+}

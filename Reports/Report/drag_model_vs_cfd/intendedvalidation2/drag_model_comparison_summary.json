@@ -1,0 +1,283 @@
+{
+  "project_json": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\IntendedValidation2.json",
+  "reference_area_m2": 1.625,
+  "conditions": {
+    "cruise": {
+      "flight_condition": {
+        "alpha_deg": 0.0,
+        "velocity_m_s": 19.948574974586975,
+        "altitude_m": 100.0
+      },
+      "aerobuildup": {
+        "CL": 0.30120961699031235,
+        "CD": 0.012978151370067933,
+        "CM": -8.443344885580317e-09,
+        "L_over_D": 23.208977026189185,
+        "lift_N": 118.15429145407433,
+        "drag_N": 5.090887518254171,
+        "reference_area_m2": 1.625,
+        "dynamic_pressure_Pa": 241.3944612028965,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        }
+      },
+      "lifting_line_plus_sep": {
+        "CL": 0.28848843432967175,
+        "CD": 0.012388380897793068,
+        "CM": -0.02978723204617037,
+        "L_over_D": 23.287016819208763,
+        "lift_N": 113.16420402345226,
+        "drag_N": 4.859540614498396,
+        "base_lifting_line_CD": 0.012388380897793068,
+        "base_lifting_line_drag_N": 4.859540614498396,
+        "strip_profile_CD": 0.006646228154553946,
+        "strip_profile_drag_N": 2.6070893296501154,
+        "pressure_rise_CD": 0.0,
+        "pressure_rise_drag_N": 0.0,
+        "separation_CD": 0.0,
+        "separation_drag_N": 0.0,
+        "dynamic_pressure_Pa": 241.3944612028965,
+        "reference_area_m2": 1.625,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        },
+        "strip_diagnostics": {
+          "active_sep_strip_count": 0,
+          "active_pressure_rise_strip_count": 0,
+          "min_alpha_margin_deg": 5.5,
+          "min_alpha_margin_y_m": 0.41592048225619627,
+          "max_alpha_excess_deg": 0.0,
+          "max_alpha_excess_y_m": 0.0,
+          "max_cd_pressure_rise": 0.0,
+          "max_cd_pressure_rise_y_m": 0.0,
+          "max_cd_separation": 0.0,
+          "max_cd_separation_y_m": 0.0,
+          "max_thickness_ratio": 0.17997757015912008,
+          "max_thickness_y_m": 0.0,
+          "max_cl_local": 0.37830469521208443,
+          "max_cl_local_y_m": 0.3781095293238148
+        }
+      },
+      "calibrated_bwb_surrogate": {
+        "CL": 0.2920674590341458,
+        "CD": 0.026849819888917242,
+        "CM": -0.03015677628671804,
+        "L_over_D": 10.877818184348493,
+        "lift_N": 114.56813372622585,
+        "drag_N": 10.532271433904988,
+        "pressure_proxy": 0.0,
+        "cl_scale": 1.0124061289070054,
+        "reference_CD": 0.012388380897793068,
+        "scaled_reference_CD": 0.012775295753303509,
+        "pressure_base_CD": 0.014074524135613732,
+        "separation_CD": 0.0,
+        "dynamic_pressure_Pa": 241.3944612028965,
+        "reference_area_m2": 1.625,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        }
+      },
+      "cfd": {
+        "CL": 0.2920674590341459,
+        "CD": 0.026849819888917242,
+        "L_over_D": 10.877818184348495,
+        "lift_N": 115.682159,
+        "drag_N": 10.634684,
+        "pressure_drag_N": 9.550196799999998,
+        "viscous_drag_N": 1.0844873099999999,
+        "source": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\cruise_extra_fine_summary.json",
+        "source_type": "summary_json"
+      },
+      "delta_vs_cfd": {
+        "aerobuildup_minus_cfd": {
+          "delta_CL": 0.009142157956166463,
+          "delta_CD": -0.01387166851884931,
+          "delta_L_over_D": 12.33115884184069
+        },
+        "low_order_minus_cfd": {
+          "delta_CL": -0.003579024704474132,
+          "delta_CD": -0.014461438991124174,
+          "delta_L_over_D": 12.409198634860267
+        },
+        "calibrated_bwb_surrogate_minus_cfd": {
+          "delta_CL": -5.551115123125783e-17,
+          "delta_CD": 0.0,
+          "delta_L_over_D": -1.7763568394002505e-15
+        }
+      }
+    },
+    "takeoff": {
+      "flight_condition": {
+        "alpha_deg": 5.094406045236825,
+        "velocity_m_s": 13.341701334814617,
+        "altitude_m": 0.0
+      },
+      "aerobuildup": {
+        "CL": 0.7332026039455597,
+        "CD": 0.045778794153960314,
+        "CM": -0.03497271827401962,
+        "L_over_D": 16.016206138582408,
+        "lift_N": 129.89893382736133,
+        "drag_N": 8.110468403278098,
+        "reference_area_m2": 1.625,
+        "dynamic_pressure_Pa": 109.02553400936604,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        }
+      },
+      "lifting_line_plus_sep": {
+        "CL": 0.6562526440461862,
+        "CD": 0.035625791903741356,
+        "CM": -0.07742383050204492,
+        "L_over_D": 18.420717378559317,
+        "lift_N": 116.26597931356504,
+        "drag_N": 6.31169660356942,
+        "base_lifting_line_CD": 0.03546731429426203,
+        "base_lifting_line_drag_N": 6.283619681316152,
+        "strip_profile_CD": 0.009037723935156892,
+        "strip_profile_drag_N": 1.6011818521720276,
+        "pressure_rise_CD": 0.00015847760947932627,
+        "pressure_rise_drag_N": 0.02807692225326839,
+        "separation_CD": 0.0,
+        "separation_drag_N": 0.0,
+        "dynamic_pressure_Pa": 109.02553400936604,
+        "reference_area_m2": 1.625,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        },
+        "strip_diagnostics": {
+          "active_sep_strip_count": 0,
+          "active_pressure_rise_strip_count": 53,
+          "min_alpha_margin_deg": 0.0,
+          "min_alpha_margin_y_m": 1.0398012056404906,
+          "max_alpha_excess_deg": 0.0,
+          "max_alpha_excess_y_m": 0.0,
+          "max_cd_pressure_rise": 0.0007058708385695992,
+          "max_cd_pressure_rise_y_m": 1.0587066821066815,
+          "max_cd_separation": 0.0,
+          "max_cd_separation_y_m": 0.0,
+          "max_thickness_ratio": 0.17997757015912008,
+          "max_thickness_y_m": 0.0,
+          "max_cl_local": 0.8017405427364418,
+          "max_cl_local_y_m": 0.3781095293238148
+        }
+      },
+      "calibrated_bwb_surrogate": {
+        "CL": 0.3849466168297004,
+        "CD": 0.023449529154348024,
+        "CM": -0.0454154994789793,
+        "L_over_D": 16.415963591248627,
+        "lift_N": 68.19964200555495,
+        "drag_N": 4.15447083727161,
+        "pressure_proxy": 0.3620985163580084,
+        "cl_scale": 0.5865829575272665,
+        "reference_CD": 0.03546731429426203,
+        "scaled_reference_CD": 0.00937500501873429,
+        "pressure_base_CD": 0.014074524135613732,
+        "separation_CD": 0.0,
+        "dynamic_pressure_Pa": 109.02553400936604,
+        "reference_area_m2": 1.625,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        }
+      },
+      "cfd": {
+        "CL": 0.38494661682970055,
+        "CD": 0.02344952915434802,
+        "L_over_D": 16.415963591248637,
+        "lift_N": 68.199689,
+        "drag_N": 4.1544737,
+        "pressure_drag_N": 3.7386817999999997,
+        "viscous_drag_N": 0.41579188,
+        "source": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\takeoff_fine_summary.json",
+        "source_type": "summary_json"
+      },
+      "delta_vs_cfd": {
+        "aerobuildup_minus_cfd": {
+          "delta_CL": 0.34825598711585914,
+          "delta_CD": 0.022329264999612294,
+          "delta_L_over_D": -0.3997574526662291
+        },
+        "low_order_minus_cfd": {
+          "delta_CL": 0.27130602721648567,
+          "delta_CD": 0.012176262749393336,
+          "delta_L_over_D": 2.0047537873106798
+        },
+        "calibrated_bwb_surrogate_minus_cfd": {
+          "delta_CL": -1.6653345369377348e-16,
+          "delta_CD": 3.469446951953614e-18,
+          "delta_L_over_D": -1.0658141036401503e-14
+        }
+      }
+    }
+  },
+  "settings": {
+    "reference_density_kg_m3": 1.225,
+    "average_count": 20,
+    "n_strips": 81,
+    "spanwise_resolution": null,
+    "polar_alpha_min": -8.0,
+    "polar_alpha_max": 20.0,
+    "polar_alpha_steps": 113,
+    "sep_k": 0.002,
+    "sep_slope_fraction": 0.7,
+    "sep_thickness_start": 0.08,
+    "sep_thickness_full": 0.14,
+    "drag_rise_alpha_min": -2.0,
+    "drag_rise_alpha_max": 4.0,
+    "drag_rise_alpha_window": 4.0,
+    "calibration_json": null
+  },
+  "calibration_source": {
+    "type": "derived_from_attached_cfd"
+  },
+  "calibration": {
+    "method": "identified_bwb_pressure_base",
+    "conditions_used": [
+      "cruise",
+      "takeoff"
+    ],
+    "lift_scale_intercept": 1.0124061289070054,
+    "lift_scale_slope": -1.1759870646880133,
+    "drag_scale_exponent": 2.4943039670431957,
+    "pressure_base_CD": 0.014074524135613732,
+    "fit_rows": [
+      {
+        "condition": "cruise",
+        "pressure_proxy": 0.0,
+        "cl_scale": 1.0124061289070054,
+        "cl_pred": 0.2920674590341458,
+        "cl_target": 0.2920674590341459,
+        "cd_pred": 0.026849819888917242,
+        "cd_target": 0.026849819888917242,
+        "delta_cl": -5.551115123125783e-17,
+        "delta_cd": 0.0
+      },
+      {
+        "condition": "takeoff",
+        "pressure_proxy": 0.3620985163580084,
+        "cl_scale": 0.5865829575272665,
+        "cl_pred": 0.3849466168297004,
+        "cl_target": 0.38494661682970055,
+        "cd_pred": 0.023449529154348024,
+        "cd_target": 0.02344952915434802,
+        "delta_cl": -1.6653345369377348e-16,
+        "delta_cd": 3.469446951953614e-18
+      }
+    ],
+    "rmse_CL": 1.2412670766236366e-16,
+    "rmse_CD": 2.4532694666933987e-18
+  }
+}

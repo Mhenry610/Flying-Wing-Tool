@@ -1,0 +1,17 @@
+{
+  "project_json": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\X48_10ft_Approx_FWT.json",
+  "metrics": {
+    "cruise_velocity": 19.948574974586975,
+    "cruise_alpha": 0.0,
+    "cruise_cl": 0.3000000004057559,
+    "cruise_cd": 0.012926032890947056,
+    "cruise_cm": -8.443344842312747e-09,
+    "cruise_l_d": 23.208977026189178,
+    "takeoff_velocity": 13.341701334814617,
+    "takeoff_alpha": 5.094406045236825,
+    "takeoff_cl": 0.7302581626676404,
+    "takeoff_cd": 0.04559495278401025,
+    "takeoff_cm": -0.03497271827401951,
+    "takeoff_l_d": 16.01620613858242
+  }
+}

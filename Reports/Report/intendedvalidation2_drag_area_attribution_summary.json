@@ -1,0 +1,33 @@
+{
+  "half_model_planform_area_m2": 0.8150249867000054,
+  "full_model_planform_area_m2": 1.630049973400011,
+  "regions": {
+    "centerbody": {
+      "half_planform_area_m2": 0.1875,
+      "planform_area_share": 0.2300542965672475,
+      "drag_share_magnitude": 0.9234501332794774,
+      "pressure_drag_share_magnitude": 0.9229477409477203,
+      "drag_to_area_share_ratio": 4.014052973835863
+    },
+    "junction": {
+      "half_planform_area_m2": 0.07493154131369352,
+      "planform_area_share": 0.09193772281398084,
+      "drag_share_magnitude": 0.019245329685150577,
+      "pressure_drag_share_magnitude": 0.019131156708035682,
+      "drag_to_area_share_ratio": 0.20933006709433058
+    },
+    "outer_wing": {
+      "half_planform_area_m2": 0.5525934453863119,
+      "planform_area_share": 0.6780079806187717,
+      "drag_share_magnitude": 0.05730464078172183,
+      "pressure_drag_share_magnitude": 0.057921087137589124,
+      "drag_to_area_share_ratio": 0.0845191242873333
+    }
+  },
+  "body_plus_junction": {
+    "planform_area_share": 0.32199201938122834,
+    "drag_share_magnitude": 0.942695462964628,
+    "pressure_drag_share_magnitude": 0.9420788976557559
+  },
+  "note": "Planform area shares come from the repo geometry export manifest. Drag shares come from the stabilized split-patch CFD attribution run averaged over the last five iterations of the t=80 continuation."
+}

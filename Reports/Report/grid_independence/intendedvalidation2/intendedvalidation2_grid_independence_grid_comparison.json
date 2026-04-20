@@ -1,0 +1,153 @@
+{
+  "study_name": "intendedvalidation2_grid_independence",
+  "report_output_dir": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2",
+  "conditions": {
+    "cruise": {
+      "rows": [
+        {
+          "name": "cruise_coarse",
+          "condition": "cruise",
+          "mesh_preset": "coarse",
+          "cell_count": 422082,
+          "summary_path": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\cruise_coarse_summary.json",
+          "Cd": 0.02801548309182929,
+          "Cl": 0.2854135326016141,
+          "L_over_D": 10.187706949420662,
+          "drag_full_N": 11.0963802,
+          "lift_full_N": 113.04666999999999,
+          "delta_prev_Cd_percent": null,
+          "delta_prev_Cl_percent": null,
+          "delta_prev_L_over_D_percent": null
+        },
+        {
+          "name": "cruise_medium",
+          "condition": "cruise",
+          "mesh_preset": "medium",
+          "cell_count": 2158783,
+          "summary_path": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\cruise_medium_summary.json",
+          "Cd": 0.027410085862640165,
+          "Cl": 0.28773135315935533,
+          "L_over_D": 10.497280257050445,
+          "drag_full_N": 10.8565943,
+          "lift_full_N": 113.964713,
+          "delta_prev_Cd_percent": -2.160938032746937,
+          "delta_prev_Cl_percent": 0.8120920324322787,
+          "delta_prev_L_over_D_percent": 3.038694665705786
+        },
+        {
+          "name": "cruise_fine",
+          "condition": "cruise",
+          "mesh_preset": "fine",
+          "cell_count": 2772883,
+          "summary_path": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\cruise_fine_summary.json",
+          "Cd": 0.027404547338891805,
+          "Cl": 0.2904075530900776,
+          "L_over_D": 10.597057078122269,
+          "drag_full_N": 10.8544006,
+          "lift_full_N": 115.024703,
+          "delta_prev_Cd_percent": -0.0202061524947976,
+          "delta_prev_Cl_percent": 0.930103689200703,
+          "delta_prev_L_over_D_percent": 0.9505016406969756
+        },
+        {
+          "name": "cruise_extra_fine",
+          "condition": "cruise",
+          "mesh_preset": "extra_fine",
+          "cell_count": 8505080,
+          "summary_path": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\cruise_extra_fine_summary.json",
+          "Cd": 0.026849819888917242,
+          "Cl": 0.2920674590341459,
+          "L_over_D": 10.87781817367587,
+          "drag_full_N": 10.634684,
+          "lift_full_N": 115.682159,
+          "delta_prev_Cd_percent": -2.024216795536367,
+          "delta_prev_Cl_percent": 0.5715780896213196,
+          "delta_prev_L_over_D_percent": 2.649425151566228
+        }
+      ],
+      "independence": {
+        "medium_to_fine_abs_delta_percent": {
+          "Cd": 0.0202061524947976,
+          "Cl": 0.930103689200703,
+          "L_over_D": 0.9505016406969756
+        },
+        "passes_tolerance": true,
+        "note": "Heuristic pass uses Cd and Cl only; boundary-layer independence is still separate if layers are not being added."
+      }
+    },
+    "takeoff": {
+      "rows": [
+        {
+          "name": "takeoff_coarse",
+          "condition": "takeoff",
+          "mesh_preset": "coarse",
+          "cell_count": 422082,
+          "summary_path": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\takeoff_coarse_summary.json",
+          "Cd": 0.011076333752517039,
+          "Cl": 0.1660019557401327,
+          "L_over_D": 14.987084988698992,
+          "drag_full_N": 4.3871173,
+          "lift_full_N": 65.7501,
+          "delta_prev_Cd_percent": null,
+          "delta_prev_Cl_percent": null,
+          "delta_prev_L_over_D_percent": null
+        },
+        {
+          "name": "takeoff_medium",
+          "condition": "takeoff",
+          "mesh_preset": "medium",
+          "cell_count": 2158783,
+          "summary_path": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\takeoff_medium_summary.json",
+          "Cd": 0.010705472061346625,
+          "Cl": 0.1691728508455508,
+          "L_over_D": 15.802465308743113,
+          "drag_full_N": 4.2402263,
+          "lift_full_N": 67.006029,
+          "delta_prev_Cd_percent": -3.3482350699854817,
+          "delta_prev_Cl_percent": 1.9101552697258377,
+          "delta_prev_L_over_D_percent": 5.440553120629914
+        },
+        {
+          "name": "takeoff_fine",
+          "condition": "takeoff",
+          "mesh_preset": "fine",
+          "cell_count": 2772883,
+          "summary_path": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\takeoff_fine_summary.json",
+          "Cd": 0.010488968979072966,
+          "Cl": 0.17218653287019817,
+          "L_over_D": 16.415963532956084,
+          "drag_full_N": 4.1544737,
+          "lift_full_N": 68.199689,
+          "delta_prev_Cd_percent": -2.0223590424878903,
+          "delta_prev_Cl_percent": 1.7814217881796819,
+          "delta_prev_L_over_D_percent": 3.8822943903160367
+        },
+        {
+          "name": "takeoff_extra_fine",
+          "condition": "takeoff",
+          "mesh_preset": "extra_fine",
+          "cell_count": 33900695,
+          "summary_path": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\takeoff_extra_fine_summary.json",
+          "Cd": 0.01081705802757096,
+          "Cl": 0.1711934866962236,
+          "L_over_D": 15.82638621204868,
+          "drag_full_N": 4.284423299999999,
+          "lift_full_N": 67.806363,
+          "delta_prev_Cd_percent": 3.1279437392996376,
+          "delta_prev_Cl_percent": -0.5767269701185961,
+          "delta_prev_L_over_D_percent": -3.5914877596054002
+        }
+      ],
+      "independence": {
+        "medium_to_fine_abs_delta_percent": {
+          "Cd": 2.0223590424878903,
+          "Cl": 1.7814217881796819,
+          "L_over_D": 3.8822943903160367
+        },
+        "passes_tolerance": false,
+        "note": "Heuristic pass uses Cd and Cl only; boundary-layer independence is still separate if layers are not being added."
+      }
+    }
+  },
+  "tolerance_percent": 1.0
+}

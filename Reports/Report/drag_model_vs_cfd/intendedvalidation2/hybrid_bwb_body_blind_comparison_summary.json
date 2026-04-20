@@ -1,0 +1,294 @@
+{
+  "project_json": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\IntendedValidation2.json",
+  "reference_area_m2": 1.625,
+  "body_proxies": {
+    "body_area_m2": 0.375,
+    "body_area_ratio": 0.23076923076923078,
+    "body_camber_area_ratio": 0.0,
+    "body_mean_thickness_ratio": 0.1200287343577882,
+    "body_length_m": 0.75,
+    "body_form_drag_proxy": 0.0365717266574206,
+    "body_peak_cross_section_area_m2": 0.04502365659390786
+  },
+  "hybrid_settings": {
+    "mode": "blind",
+    "calibration_condition": "cruise",
+    "body_alpha_break_sweep_factor": 0.096,
+    "body_drag_pressure_decay": 0.06,
+    "body_x_samples": 600
+  },
+  "conditions": {
+    "cruise": {
+      "flight_condition": {
+        "alpha_deg": 0.0,
+        "velocity_m_s": 19.948574974586975,
+        "altitude_m": 100.0
+      },
+      "aerobuildup": {
+        "CL": 0.30120961699031235,
+        "CD": 0.012978151370067933,
+        "CM": -8.443344885580317e-09,
+        "L_over_D": 23.208977026189185,
+        "lift_N": 118.15429145407433,
+        "drag_N": 5.090887518254171,
+        "reference_area_m2": 1.625,
+        "dynamic_pressure_Pa": 241.3944612028965,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        }
+      },
+      "lifting_line_plus_sep": {
+        "CL": 0.28848843432967175,
+        "CD": 0.012388380897793068,
+        "CM": -0.02978723204617037,
+        "L_over_D": 23.287016819208763,
+        "lift_N": 113.16420402345226,
+        "drag_N": 4.859540614498396,
+        "base_lifting_line_CD": 0.012388380897793068,
+        "base_lifting_line_drag_N": 4.859540614498396,
+        "strip_profile_CD": 0.006646228154553946,
+        "strip_profile_drag_N": 2.6070893296501154,
+        "pressure_rise_CD": 0.0,
+        "pressure_rise_drag_N": 0.0,
+        "separation_CD": 0.0,
+        "separation_drag_N": 0.0,
+        "dynamic_pressure_Pa": 241.3944612028965,
+        "reference_area_m2": 1.625,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        },
+        "strip_diagnostics": {
+          "active_sep_strip_count": 0,
+          "active_pressure_rise_strip_count": 0,
+          "min_alpha_margin_deg": 5.5,
+          "min_alpha_margin_y_m": 0.41592048225619627,
+          "max_alpha_excess_deg": 0.0,
+          "max_alpha_excess_y_m": 0.0,
+          "max_cd_pressure_rise": 0.0,
+          "max_cd_pressure_rise_y_m": 0.0,
+          "max_cd_separation": 0.0,
+          "max_cd_separation_y_m": 0.0,
+          "max_thickness_ratio": 0.17997757015912008,
+          "max_thickness_y_m": 0.0,
+          "max_cl_local": 0.37830469521208443,
+          "max_cl_local_y_m": 0.3781095293238148
+        }
+      },
+      "hybrid_bwb_body": {
+        "CL": 0.28848843432967175,
+        "CD": 0.026912215055230754,
+        "CM": -0.02978723204617037,
+        "L_over_D": 10.719609431539531,
+        "lift_N": 113.16420402345224,
+        "drag_N": 10.5567469361801,
+        "dynamic_pressure_Pa": 241.3944612028965,
+        "reference_area_m2": 1.625,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        },
+        "body_pressure_proxy": 0.0,
+        "body_section_cl0_proxy": -1.4050878000169197e-16,
+        "body_symmetry_factor": 0.9999999999999964,
+        "body_alpha_break_deg": 1.92,
+        "body_lift_retention": 1.0,
+        "body_drag_retention": 1.0,
+        "body_drag_retention_floor": 0.0,
+        "body_alpha_ratio": 0.0,
+        "body_delta_CL": 0.0,
+        "body_delta_CD": 0.014523834157437687,
+        "body_camber_delta_CL": 0.0,
+        "body_symmetric_relief_CL": -0.0,
+        "body_drag_form_factor_extra": 0.25251098970936026,
+        "body_bluffness_ratio": 0.282917048208388,
+        "body_symmetric_drag_multiplier": 1.6224175060584514,
+        "body_cambered_drag_multiplier": 1.0,
+        "body_drag_shape_multiplier": 1.6224175060584514,
+        "body_distributed_strip_count": 81,
+        "base_low_order_relieved_CD": 0.012388380897793068,
+        "reference_attached_CD": 0.012388380897793068,
+        "base_low_order_CL": 0.28848843432967175,
+        "base_low_order_CD": 0.012388380897793068
+      },
+      "cfd": {
+        "CL": 0.2920674590341459,
+        "CD": 0.026849819888917242,
+        "L_over_D": 10.877818184348495,
+        "lift_N": 115.682159,
+        "drag_N": 10.634684,
+        "pressure_drag_N": 9.550196799999998,
+        "viscous_drag_N": 1.0844873099999999,
+        "source": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\cruise_extra_fine_summary.json",
+        "source_type": "summary_json"
+      },
+      "delta_vs_cfd": {
+        "aerobuildup_minus_cfd": {
+          "delta_CL": 0.009142157956166463,
+          "delta_CD": -0.01387166851884931,
+          "delta_L_over_D": 12.33115884184069
+        },
+        "low_order_minus_cfd": {
+          "delta_CL": -0.003579024704474132,
+          "delta_CD": -0.014461438991124174,
+          "delta_L_over_D": 12.409198634860267
+        },
+        "hybrid_bwb_body_minus_cfd": {
+          "delta_CL": -0.003579024704474132,
+          "delta_CD": 6.239516631351139e-05,
+          "delta_L_over_D": -0.15820875280896374
+        }
+      }
+    },
+    "takeoff": {
+      "flight_condition": {
+        "alpha_deg": 5.094406045236825,
+        "velocity_m_s": 13.341701334814617,
+        "altitude_m": 0.0
+      },
+      "aerobuildup": {
+        "CL": 0.7332026039455597,
+        "CD": 0.045778794153960314,
+        "CM": -0.03497271827401962,
+        "L_over_D": 16.016206138582408,
+        "lift_N": 129.89893382736133,
+        "drag_N": 8.110468403278098,
+        "reference_area_m2": 1.625,
+        "dynamic_pressure_Pa": 109.02553400936604,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        }
+      },
+      "lifting_line_plus_sep": {
+        "CL": 0.6562526440461862,
+        "CD": 0.035625791903741356,
+        "CM": -0.07742383050204492,
+        "L_over_D": 18.420717378559317,
+        "lift_N": 116.26597931356504,
+        "drag_N": 6.31169660356942,
+        "base_lifting_line_CD": 0.03546731429426203,
+        "base_lifting_line_drag_N": 6.283619681316152,
+        "strip_profile_CD": 0.009037723935156892,
+        "strip_profile_drag_N": 1.6011818521720276,
+        "pressure_rise_CD": 0.00015847760947932627,
+        "pressure_rise_drag_N": 0.02807692225326839,
+        "separation_CD": 0.0,
+        "separation_drag_N": 0.0,
+        "dynamic_pressure_Pa": 109.02553400936604,
+        "reference_area_m2": 1.625,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        },
+        "strip_diagnostics": {
+          "active_sep_strip_count": 0,
+          "active_pressure_rise_strip_count": 53,
+          "min_alpha_margin_deg": 0.0,
+          "min_alpha_margin_y_m": 1.0398012056404906,
+          "max_alpha_excess_deg": 0.0,
+          "max_alpha_excess_y_m": 0.0,
+          "max_cd_pressure_rise": 0.0007058708385695992,
+          "max_cd_pressure_rise_y_m": 1.0587066821066815,
+          "max_cd_separation": 0.0,
+          "max_cd_separation_y_m": 0.0,
+          "max_thickness_ratio": 0.17997757015912008,
+          "max_thickness_y_m": 0.0,
+          "max_cl_local": 0.8017405427364418,
+          "max_cl_local_y_m": 0.3781095293238148
+        }
+      },
+      "hybrid_bwb_body": {
+        "CL": 0.386705433987003,
+        "CD": 0.023434514989887256,
+        "CM": -0.0456230024318535,
+        "L_over_D": 16.50153349253777,
+        "lift_N": 68.51124547272956,
+        "drag_N": 4.1518108304122965,
+        "dynamic_pressure_Pa": 109.02553400936604,
+        "reference_area_m2": 1.625,
+        "geometry_reference": {
+          "x_np": 0.29598640152644246,
+          "mac": 0.5798417564361845,
+          "x_cg": 0.2495990610115477
+        },
+        "body_pressure_proxy": 0.3620985163580084,
+        "body_section_cl0_proxy": -6.380936037711568e-18,
+        "body_symmetry_factor": 0.9999999999999999,
+        "body_alpha_break_deg": 1.92,
+        "body_lift_retention": -0.75,
+        "body_drag_retention": 0.20499999999999996,
+        "body_drag_retention_floor": 0.20499999999999996,
+        "body_alpha_ratio": 2.65333648189418,
+        "body_delta_CL": -0.2695472100591832,
+        "body_delta_CD": 0.0029773860022747297,
+        "body_camber_delta_CL": 0.0,
+        "body_symmetric_relief_CL": -0.2695472100591832,
+        "body_drag_form_factor_extra": 0.25251098970936026,
+        "body_bluffness_ratio": 0.282917048208388,
+        "body_symmetric_drag_multiplier": 1.6224175060584534,
+        "body_cambered_drag_multiplier": 1.0000000000000002,
+        "body_drag_shape_multiplier": 1.6224175060584538,
+        "body_distributed_strip_count": 81,
+        "base_low_order_relieved_CD": 0.020457128987612525,
+        "reference_attached_CD": 0.012388380897793068,
+        "base_low_order_CL": 0.6562526440461862,
+        "base_low_order_CD": 0.035625791903741356
+      },
+      "cfd": {
+        "CL": 0.38494661682970055,
+        "CD": 0.02344952915434802,
+        "L_over_D": 16.415963591248637,
+        "lift_N": 68.199689,
+        "drag_N": 4.1544737,
+        "pressure_drag_N": 3.7386817999999997,
+        "viscous_drag_N": 0.41579188,
+        "source": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\Reports\\Report\\grid_independence\\intendedvalidation2\\takeoff_fine_summary.json",
+        "source_type": "summary_json"
+      },
+      "delta_vs_cfd": {
+        "aerobuildup_minus_cfd": {
+          "delta_CL": 0.34825598711585914,
+          "delta_CD": 0.022329264999612294,
+          "delta_L_over_D": -0.3997574526662291
+        },
+        "low_order_minus_cfd": {
+          "delta_CL": 0.27130602721648567,
+          "delta_CD": 0.012176262749393336,
+          "delta_L_over_D": 2.0047537873106798
+        },
+        "hybrid_bwb_body_minus_cfd": {
+          "delta_CL": 0.0017588171573024725,
+          "delta_CD": -1.5014164460765145e-05,
+          "delta_L_over_D": 0.08556990128913355
+        }
+      }
+    }
+  },
+  "blind_body_parameters": {
+    "sweep_cosine": 0.9396926207859084,
+    "drag_form_factor_extra": 0.25251098970936026,
+    "pressure_decay_scale": 0.09002155076834115,
+    "body_bluffness_ratio": 0.282917048208388,
+    "cambered_lift_scale": 0.96,
+    "alpha_break_sweep_factor": 0.096,
+    "alpha_relief_gain": 4.1,
+    "symmetric_drag_floor": 0.205,
+    "symmetric_form_drag_gain": 2.2,
+    "cambered_drag_alpha_gain": 1.8,
+    "relief_region_mode": "chord_0.55",
+    "relief_onset_floor": 0.15,
+    "relief_onset_power": 2.0,
+    "relief_root_power": 0.5,
+    "relief_cap_fraction": 0.95,
+    "relief_target_scale": 1.0,
+    "reference_condition": "cruise",
+    "reference_low_order_cd": 0.012388380897793068
+  }
+}

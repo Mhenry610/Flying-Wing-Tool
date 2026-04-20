@@ -1,0 +1,30 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Local temp / scratch outputs
+/tmp/
+/tmp_*.txt
+
+# LaTeX intermediates
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.synctex.gz
+
+# Presentation build artifacts
+~$*.pptx
+Reports/**/tmp/
+Reports/Poster/pptx_build/
+Reports/Presentation/fwt_thesis_defense_work/
+Reports/Presentation/rendered_check_com/
+
+# BARAM CFD artifacts
+/BARAM/geometry_exports/
+/BARAM/studies/
+/BARAM/*.bf/
+/BARAM/*.bm/
+/BARAM/*.pvsm

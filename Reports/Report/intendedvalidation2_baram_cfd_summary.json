@@ -1,0 +1,72 @@
+{
+  "source_case": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\IntendedValidation2.bf",
+  "source_pvsm": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\IntendedValidation2_local.pvsm",
+  "normalization_assumptions": {
+    "symmetry_plane_present": true,
+    "forces_doubled_to_estimate_full_aircraft": true,
+    "reference_area_m2": 1.625,
+    "reference_density_kg_m3": 1.225,
+    "reference_velocity_m_s": 19.948574974586975,
+    "reference_dynamic_pressure_Pa": 243.7417066539896,
+    "inference_note": "Cruise-speed scaling is inferred from the zero-angle-of-attack BARAM case and the zero-angle-of-attack AeroSandbox cruise point. BARAM monitor coefficients themselves use Aref=1 and magUInf=1."
+  },
+  "baram_raw_monitor_last": {
+    "time": 604.0,
+    "Cd_raw": 11.03161,
+    "Cl_raw": 88.21478,
+    "Cm_raw": -0.5561555
+  },
+  "baram_cruise_scaled_last20_average": {
+    "Cd": 0.03411648953627802,
+    "Cl": 0.2727773491377428,
+    "L_over_D": 7.995469402286997,
+    "drag_full_N": 13.5128685,
+    "lift_full_N": 108.041727
+  },
+  "aerosandbox_cruise": {
+    "Cd": 0.012926032890947056,
+    "Cl": 0.3000000004057559,
+    "L_over_D": 23.208977026189178,
+    "alpha_deg": 0.0,
+    "velocity_m_s": 19.948574974586975
+  },
+  "comparison": {
+    "delta_Cd": 0.021190456645330966,
+    "delta_Cl": -0.0272226512680131,
+    "delta_L_over_D": -15.213507623902181
+  },
+  "drag_breakdown_last20_average_full_aircraft_N": {
+    "total_drag": 13.5128685,
+    "pressure_drag": 10.428700000000001,
+    "viscous_drag": 3.0841686,
+    "pressure_drag_fraction": 0.7717606369069603,
+    "viscous_drag_fraction": 0.22823937049339302,
+    "interpretation": "The CFD drag discrepancy is pressure-dominated rather than primarily viscous. Pressure drag alone exceeds the total low-order cruise drag."
+  },
+  "paraview_state_pipeline": {
+    "readers": [
+      "case.foam",
+      "case.foam"
+    ],
+    "filters_observed": [
+      "ExtractBlock1",
+      "Slice1",
+      "Reflect1",
+      "Reflect2",
+      "Reflect3",
+      "StreamTracer1",
+      "StreamTracer2",
+      "StreamTracer3",
+      "Contour1"
+    ],
+    "field_colormaps_observed": [
+      "Cp",
+      "U",
+      "epsilon",
+      "k",
+      "p",
+      "p_rgh",
+      "vorticity"
+    ]
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "source_case": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\IntendedValidation2.bf",
+  "source_case_dir": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\IntendedValidation2.bf\\case",
+  "source_force_file": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\IntendedValidation2.bf\\case\\postProcessing\\force-mon-1_forces\\439\\force.dat",
+  "source_coefficient_file": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\IntendedValidation2.bf\\case\\postProcessing\\force-mon-1\\439\\coefficient.dat",
+  "normalization": {
+    "symmetry_plane_present": true,
+    "forces_doubled_to_estimate_full_aircraft": true,
+    "reference_area_m2": 1.625,
+    "reference_density_kg_m3": 1.225,
+    "reference_velocity_m_s": 19.948574974586975,
+    "reference_dynamic_pressure_Pa": 243.7417066539896,
+    "average_count": 20
+  },
+  "raw_last": {
+    "time": 604.0,
+    "Cd_raw": 11.03161,
+    "Cl_raw": 88.21478,
+    "Cm_raw": -0.5561555
+  },
+  "scaled_last_average": {
+    "Cd": 0.03411648953627802,
+    "Cl": 0.2727773491377428,
+    "L_over_D": 7.995469402286997,
+    "drag_full_N": 13.5128685,
+    "lift_full_N": 108.041727
+  },
+  "drag_breakdown_last_average_full_aircraft_N": {
+    "total_drag": 13.5128685,
+    "pressure_drag": 10.428700000000001,
+    "viscous_drag": 3.0841686,
+    "pressure_drag_fraction": 0.7717606369069603,
+    "viscous_drag_fraction": 0.22823937049339302
+  },
+  "lift_breakdown_last_average_full_aircraft_N": {
+    "total_lift": 108.041727,
+    "pressure_lift": 108.05426,
+    "viscous_lift": -0.012533597900000002
+  },
+  "comparison_target": {
+    "cruise_cd": 0.012926032890947056,
+    "cruise_cl": 0.3000000004057559,
+    "cruise_l_d": 23.208977026189178,
+    "cruise_alpha_deg": 0.0,
+    "cruise_velocity_m_s": 19.948574974586975
+  },
+  "comparison_delta": {
+    "delta_Cd": 0.021190456645330966,
+    "delta_Cl": -0.0272226512680131,
+    "delta_L_over_D": -15.213507623902181
+  },
+  "interpretation": {
+    "drag_mismatch_is_pressure_dominated": true,
+    "note": "Pressure drag alone exceeds the low-order cruise drag when the comparison target is supplied."
+  }
+}

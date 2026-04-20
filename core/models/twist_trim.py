@@ -5,6 +5,7 @@ from typing import Literal
 
 
 LiftDistributionType = Literal["bell", "elliptical"]
+StructuralSpanloadModel = Literal["vlm", "blind_hybrid_bwb_body"]
 
 
 @dataclass
@@ -19,6 +20,7 @@ class TwistTrimParameters:
     cl_alpha_tip_per_deg: float = 0.075
     design_cl: float = 0.45
     lift_distribution: LiftDistributionType = "bell"
+    structural_spanload_model: StructuralSpanloadModel = "vlm"
     static_margin_percent: float = 8.0
     estimated_cl_max: float = 1.2
     estimated_cl_max_speed: float = 0.35
@@ -35,6 +37,7 @@ class TwistTrimParameters:
             "cl_alpha_tip_per_deg": self.cl_alpha_tip_per_deg,
             "design_cl": self.design_cl,
             "lift_distribution": self.lift_distribution,
+            "structural_spanload_model": self.structural_spanload_model,
             "static_margin_percent": self.static_margin_percent,
             "estimated_cl_max": self.estimated_cl_max,
             "estimated_cl_max_speed": self.estimated_cl_max_speed,

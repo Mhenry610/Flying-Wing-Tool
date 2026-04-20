@@ -1,0 +1,56 @@
+{
+  "source_case": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\studies\\intendedvalidation2_validation\\split_flow_run_smoke3\\IntendedValidation2.bm",
+  "source_case_dir": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\studies\\intendedvalidation2_validation\\split_flow_run_smoke3\\IntendedValidation2.bm\\case",
+  "source_force_file": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\studies\\intendedvalidation2_validation\\split_flow_run_smoke3\\IntendedValidation2.bm\\case\\postProcessing\\force-mon-1_forces\\0\\force.dat",
+  "source_coefficient_file": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\studies\\intendedvalidation2_validation\\split_flow_run_smoke3\\IntendedValidation2.bm\\case\\postProcessing\\force-mon-1\\0\\coefficient.dat",
+  "normalization": {
+    "symmetry_plane_present": true,
+    "forces_doubled_to_estimate_full_aircraft": true,
+    "reference_area_m2": 1.625,
+    "reference_density_kg_m3": 1.225,
+    "reference_velocity_m_s": 19.948574974586975,
+    "reference_dynamic_pressure_Pa": 243.7417066539896,
+    "average_count": 1
+  },
+  "raw_last": {
+    "time": 1.0,
+    "Cd_raw": 133.9832,
+    "Cl_raw": 128.8093,
+    "Cm_raw": -55354.79
+  },
+  "scaled_last_average": {
+    "Cd": 0.4143841818408571,
+    "Cl": 0.3983822740785999,
+    "L_over_D": 0.96138388369177,
+    "drag_full_N": 164.1294,
+    "lift_full_N": 157.79136
+  },
+  "drag_breakdown_last_average_full_aircraft_N": {
+    "total_drag": 164.1294,
+    "pressure_drag": 160.67434,
+    "viscous_drag": 3.45506,
+    "pressure_drag_fraction": 0.9789491705934463,
+    "viscous_drag_fraction": 0.02105082940655361
+  },
+  "lift_breakdown_last_average_full_aircraft_N": {
+    "total_lift": 157.79136,
+    "pressure_lift": 157.55946,
+    "viscous_lift": 0.231894
+  },
+  "comparison_target": {
+    "cruise_cd": 0.012926032890947056,
+    "cruise_cl": 0.3000000004057559,
+    "cruise_l_d": 23.208977026189178,
+    "cruise_alpha_deg": 0.0,
+    "cruise_velocity_m_s": 19.948574974586975
+  },
+  "comparison_delta": {
+    "delta_Cd": 0.40145814894991005,
+    "delta_Cl": 0.09838227367284397,
+    "delta_L_over_D": -22.247593142497408
+  },
+  "interpretation": {
+    "drag_mismatch_is_pressure_dominated": true,
+    "note": "Pressure drag alone exceeds the low-order cruise drag when the comparison target is supplied."
+  }
+}

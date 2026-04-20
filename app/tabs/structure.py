@@ -180,6 +180,14 @@ class StructureTab(QWidget):
         self.load_factor_spin.setSingleStep(0.5)
         self.load_factor_spin.setValue(2.5)
         constraints_layout.addRow("Design Load Factor:", self.load_factor_spin)
+
+        self.flight_condition_combo = QComboBox()
+        self.flight_condition_combo.addItem("Cruise", "cruise")
+        self.flight_condition_combo.addItem("Takeoff", "takeoff")
+        self.flight_condition_combo.setToolTip(
+            "Named operating point used to generate aerodynamic loads for structural analysis."
+        )
+        constraints_layout.addRow("Analysis Point:", self.flight_condition_combo)
         
         controls_layout.addWidget(constraints_group)
         
@@ -553,7 +561,32 @@ class StructureTab(QWidget):
         if self.exaggerate_chk.isChecked():
             return self.exaggeration_factor_spin.value()
         return 1.0
-    
+
+    def _selected_structural_condition_name(self) -> str:
+        """Get the currently selected named structural-analysis operating point."""
+        selected = self.flight_condition_combo.currentData()
+        if selected in {"cruise", "takeoff"}:
+            return str(selected)
+        return "cruise"
+
+    @staticmethod
+    def _format_condition_name(condition_name: Optional[str]) -> str:
+        """Format a stored flight-condition key for display."""
+        key = str(condition_name or "custom").strip().lower()
+        label_map = {
+            "cruise": "Cruise",
+            "takeoff": "Takeoff",
+            "custom": "Custom",
+        }
+        return label_map.get(key, key.replace("_", " ").title())
+
+    def _build_structural_flight_condition_request(self) -> Dict[str, Any]:
+        """Build the structural flight-condition request from the current UI state."""
+        return {
+            "condition_name": self._selected_structural_condition_name(),
+            "load_factor": self.load_factor_spin.value(),
+        }
+
     def _run_analysis(self):
         """Run structural analysis."""
         try:
@@ -561,9 +594,7 @@ class StructureTab(QWidget):
             service = AeroSandboxService(self.project)
             
             # Run analysis
-            flight_condition = {
-                "load_factor": self.load_factor_spin.value(),
-            }
+            flight_condition = self._build_structural_flight_condition_request()
             
             result = service.run_aerostructural_analysis(flight_condition=flight_condition)
             self.analysis_result = result
@@ -721,8 +752,19 @@ class StructureTab(QWidget):
         summary_lines.extend([
             "",
             "--- Flight Condition ---",
+            f"Analysis Point: {self._format_condition_name(result.get('flight_condition', {}).get('condition_name'))}",
             f"Load Factor: {result.get('flight_condition', {}).get('load_factor', 2.5):.1f} g",
         ])
+        flight_condition = result.get("flight_condition", {})
+        velocity_mps = flight_condition.get("velocity_mps")
+        alpha_deg = flight_condition.get("alpha_deg")
+        altitude_m = flight_condition.get("altitude_m")
+        if velocity_mps is not None:
+            summary_lines.append(f"Velocity: {float(velocity_mps):.2f} m/s")
+        if alpha_deg is not None:
+            summary_lines.append(f"Alpha: {float(alpha_deg):.2f} deg")
+        if altitude_m is not None:
+            summary_lines.append(f"Altitude: {float(altitude_m):.0f} m")
         
         # Add mass breakdown if available
         mass_breakdown = struct.get('mass_breakdown')
@@ -1384,10 +1426,17 @@ class StructureTab(QWidget):
             wing_box_sections.sort(key=lambda s: s.y)
             
             # Get lift distribution
-            load_factor = self.load_factor_spin.value()
+            flight_condition = service.resolve_structural_flight_condition(
+                self._build_structural_flight_condition_request()
+            )
+            load_factor = float(flight_condition.get("load_factor", self.load_factor_spin.value()))
             y_aero, lift_per_span = service.get_spanwise_lift_distribution(
+                velocity=flight_condition.get("velocity_mps"),
+                alpha=flight_condition.get("alpha_deg"),
+                altitude_m=flight_condition.get("altitude_m"),
                 load_factor=load_factor,
                 n_spanwise_points=100,
+                analysis_method=getattr(self.project.wing.twist_trim, "structural_spanload_model", "vlm"),
             )
             
             import numpy as _np_std
@@ -1404,8 +1453,11 @@ class StructureTab(QWidget):
             moment_distribution = None
             try:
                 y_moment, moment_per_span = service.get_spanwise_moment_distribution(
+                    velocity=flight_condition.get("velocity_mps"),
+                    alpha=flight_condition.get("alpha_deg"),
                     load_factor=load_factor,
                     n_spanwise_points=100,
+                    altitude_m=flight_condition.get("altitude_m"),
                 )
                 moment_interp = interp1d(
                     y_moment, moment_per_span, kind='linear',
@@ -2159,6 +2211,26 @@ class StructureTab(QWidget):
         self.stringer_count_spin.setValue(getattr(planform, 'stringer_count', 0))
         self.stringer_height_spin.setValue(getattr(planform, 'stringer_height_mm', 10.0))
         self.stringer_thickness_spin.setValue(getattr(planform, 'stringer_thickness_mm', 1.5))
+
+        saved_condition = (
+            self.project.analysis.structural_analysis.get("flight_condition", {}).get("condition_name")
+            if self.project.analysis.structural_analysis
+            else None
+        )
+        saved_condition = str(saved_condition).strip().lower()
+        combo_index = self.flight_condition_combo.findData(saved_condition)
+        if combo_index < 0:
+            combo_index = self.flight_condition_combo.findData("cruise")
+        if combo_index >= 0:
+            self.flight_condition_combo.setCurrentIndex(combo_index)
+
+        saved_load_factor = (
+            self.project.analysis.structural_analysis.get("flight_condition", {}).get("load_factor")
+            if self.project.analysis.structural_analysis
+            else None
+        )
+        if saved_load_factor is not None:
+            self.load_factor_spin.setValue(float(saved_load_factor))
         
         # Restore structural analysis results if they exist
         if self.project.analysis.structural_analysis:

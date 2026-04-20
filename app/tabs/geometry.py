@@ -641,6 +641,11 @@ class TwistTrimTab(QWidget):
         self.distribution_box.addItems(["Bell", "Elliptical"])
         self.distribution_box.currentTextChanged.connect(self._on_dist_changed)
         form.addRow("Lift Dist", self.distribution_box)
+
+        self.structural_spanload_box = QComboBox()
+        self.structural_spanload_box.addItems(["VLM", "Blind Hybrid BWB"])
+        self.structural_spanload_box.currentTextChanged.connect(self._on_structural_spanload_changed)
+        form.addRow("Struct Spanload", self.structural_spanload_box)
         
         self._add_spin(form, "static_margin_percent", "Static Margin %", -5.0, 30.0, 0.5)
         self._add_spin(form, "estimated_cl_max", "Est Cl max", 0.1, 5.0, 0.05)
@@ -692,6 +697,13 @@ class TwistTrimTab(QWidget):
         if self._loading: return
         self.project.wing.twist_trim.lift_distribution = text.lower()
         self._update_plots()
+
+    def _on_structural_spanload_changed(self, text: str) -> None:
+        if self._loading: return
+        if text == "Blind Hybrid BWB":
+            self.project.wing.twist_trim.structural_spanload_model = "blind_hybrid_bwb_body"
+        else:
+            self.project.wing.twist_trim.structural_spanload_model = "vlm"
 
     def _on_estimate(self):
         service = AeroSandboxService(self.project)
@@ -765,6 +777,10 @@ class TwistTrimTab(QWidget):
         idx = 0 if params.lift_distribution == "bell" else 1
         if self.distribution_box.currentIndex() != idx:
             self.distribution_box.setCurrentIndex(idx)
+
+        spanload_idx = 1 if getattr(params, "structural_spanload_model", "vlm") == "blind_hybrid_bwb_body" else 0
+        if self.structural_spanload_box.currentIndex() != spanload_idx:
+            self.structural_spanload_box.setCurrentIndex(spanload_idx)
             
         self._loading = False
         self._update_plots()

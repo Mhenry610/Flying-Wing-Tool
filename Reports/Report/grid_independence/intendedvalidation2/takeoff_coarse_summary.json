@@ -1,0 +1,78 @@
+{
+  "source_case": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\studies\\intendedvalidation2_grid_independence\\variants\\takeoff_coarse\\IntendedValidation2.bm",
+  "source_case_dir": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\studies\\intendedvalidation2_grid_independence\\variants\\takeoff_coarse\\IntendedValidation2.bm\\case",
+  "source_force_file": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\studies\\intendedvalidation2_grid_independence\\variants\\takeoff_coarse\\IntendedValidation2.bm\\case\\postProcessing\\force-mon-1_forces\\0\\force.dat",
+  "source_coefficient_file": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\studies\\intendedvalidation2_grid_independence\\variants\\takeoff_coarse\\IntendedValidation2.bm\\case\\postProcessing\\force-mon-1\\0\\coefficient.dat",
+  "normalization": {
+    "symmetry_plane_present": true,
+    "forces_doubled_to_estimate_full_aircraft": true,
+    "reference_area_m2": 1.625,
+    "reference_density_kg_m3": 1.225,
+    "reference_velocity_m_s": 19.948574974586975,
+    "reference_dynamic_pressure_Pa": 243.7417066539896,
+    "geometry_scale": {
+      "source": "D:\\AI code\\flying wing tool\\Full Set\\FWT_V1-0\\BARAM\\studies\\intendedvalidation2_grid_independence\\variants\\takeoff_coarse\\IntendedValidation2.bm\\case\\constant\\triSurface\\IntendedValidation2CFDmesh_surface.obj",
+      "length_scale_to_m": 0.001,
+      "area_scale_to_m2": 1e-06,
+      "inferred_units": "mm",
+      "bbox_min": [
+        0.0,
+        0.0,
+        5.665719509124756
+      ],
+      "bbox_max": [
+        749.3699951171875,
+        1512.4381103515625,
+        146.0742950439453
+      ],
+      "bbox_span": [
+        749.3699951171875,
+        1512.4381103515625,
+        140.40857553482056
+      ],
+      "note": "Geometry span is millimeter-scale; postprocessing scales forces by 1e-6 to recover physical SI values."
+    },
+    "average_count": 20
+  },
+  "raw_last": {
+    "time": 292.0,
+    "Cd_raw": 46820.89,
+    "Cl_raw": 298602.9,
+    "Cm_raw": -91220410.0
+  },
+  "scaled_last_average": {
+    "Cd": 0.011076333752517039,
+    "Cl": 0.1660019557401327,
+    "L_over_D": 14.987084988698992,
+    "drag_full_N": 4.3871173,
+    "lift_full_N": 65.7501
+  },
+  "drag_breakdown_last_average_full_aircraft_N": {
+    "total_drag": 4.3871173,
+    "pressure_drag": 4.2137265,
+    "viscous_drag": 0.173390752,
+    "pressure_drag_fraction": 0.9604772819728344,
+    "viscous_drag_fraction": 0.039522707086040304
+  },
+  "lift_breakdown_last_average_full_aircraft_N": {
+    "total_lift": 65.7501,
+    "pressure_lift": 65.748661,
+    "viscous_lift": 0.00143413627
+  },
+  "comparison_target": {
+    "cruise_cd": 0.012926032890947056,
+    "cruise_cl": 0.3000000004057559,
+    "cruise_l_d": 23.208977026189178,
+    "cruise_alpha_deg": 0.0,
+    "cruise_velocity_m_s": 19.948574974586975
+  },
+  "comparison_delta": {
+    "delta_Cd": -0.0018496991384300172,
+    "delta_Cl": -0.1339980446656232,
+    "delta_L_over_D": -8.221892037490186
+  },
+  "interpretation": {
+    "drag_mismatch_is_pressure_dominated": true,
+    "note": "Pressure drag does not exceed the low-order cruise drag in this normalization."
+  }
+}

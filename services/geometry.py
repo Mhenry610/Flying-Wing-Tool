@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 import aerosandbox.numpy as np
 import aerosandbox as asb
+import numpy as _np_std
 
 from core.models.project import WingProject
 from core.naca_generator.naca456 import generate_naca_airfoil
@@ -1447,6 +1448,50 @@ class AeroSandboxService:
         
         return metrics
 
+    def get_named_flight_condition(self, condition_name: str) -> Dict[str, float]:
+        """
+        Resolve a named flight condition using the same definitions as the Performance tab.
+
+        Supported names:
+        - "cruise": Trimmed cruise point at cruise altitude
+        - "takeoff": 1.2 * V_stall point at sea level
+        """
+        name = str(condition_name).strip().lower()
+        metrics = self.calculate_performance_metrics()
+
+        if name == "cruise":
+            return {
+                "condition_name": "cruise",
+                "velocity_mps": float(metrics["cruise_velocity"]),
+                "alpha_deg": float(metrics["cruise_alpha"]),
+                "altitude_m": float(self.wing_project.twist_trim.cruise_altitude_m),
+            }
+        if name == "takeoff":
+            return {
+                "condition_name": "takeoff",
+                "velocity_mps": float(metrics["takeoff_velocity"]),
+                "alpha_deg": float(metrics["takeoff_alpha"]),
+                "altitude_m": 0.0,
+            }
+        raise ValueError(f"Unsupported flight condition '{condition_name}'.")
+
+    def resolve_structural_flight_condition(
+        self,
+        flight_condition: Optional[Dict[str, float]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Merge a structural-analysis flight-condition request with named cruise/takeoff points.
+        """
+        resolved: Dict[str, Any] = dict(flight_condition or {})
+        name = str(resolved.get("condition_name", "")).strip().lower()
+        if name in {"cruise", "takeoff"}:
+            resolved.update(self.get_named_flight_condition(name))
+        elif not name:
+            resolved["condition_name"] = "custom"
+
+        resolved["load_factor"] = float(resolved.get("load_factor", 2.5))
+        return resolved
+
     def calculate_performance_polars(
         self, alpha_range: Tuple[float, float] = (-10, 15), num_points: int = 20
     ) -> Dict[str, Any]:
@@ -1580,6 +1625,1013 @@ class AeroSandboxService:
             
         return results
 
+    def _filter_sections_for_vlm(
+        self,
+        twist_override: Optional[List[float]] = None,
+        min_section_spacing_m: Optional[float] = None,
+        max_sections: int = 24,
+    ) -> List[SpanwiseSection]:
+        sections = self.spanwise_sections(twist_override=twist_override)
+        if len(sections) <= 2:
+            return sections
+
+        total_half_span = max(abs(sections[-1].y_m), 1e-9)
+        min_spacing = (
+            float(min_section_spacing_m)
+            if min_section_spacing_m is not None
+            else max(total_half_span / 40.0, 0.02)
+        )
+
+        filtered = [sections[0]]
+        for section in sections[1:-1]:
+            if section.y_m - filtered[-1].y_m >= min_spacing:
+                filtered.append(section)
+
+        if filtered[-1].y_m < sections[-1].y_m - 1e-9:
+            filtered.append(sections[-1])
+
+        if len(filtered) > max_sections:
+            sample_idx = [int(round(idx)) for idx in np.linspace(0, len(filtered) - 1, max_sections)]
+            dedup_idx: List[int] = []
+            for idx in sample_idx:
+                if not dedup_idx or idx != dedup_idx[-1]:
+                    dedup_idx.append(idx)
+            filtered = [filtered[idx] for idx in dedup_idx]
+            filtered[0] = sections[0]
+            filtered[-1] = sections[-1]
+
+        return filtered
+
+    def _build_vlm_wing(
+        self,
+        twist_override: Optional[List[float]] = None,
+        min_section_spacing_m: Optional[float] = None,
+    ) -> Tuple[asb.Wing, List[SpanwiseSection]]:
+        vlm_sections = self._filter_sections_for_vlm(
+            twist_override=twist_override,
+            min_section_spacing_m=min_section_spacing_m,
+        )
+        xsecs = [
+            asb.WingXSec(
+                xyz_le=[section.x_le_m, section.y_m, section.z_m],
+                chord=section.chord_m,
+                twist=section.twist_deg,
+                airfoil=section.airfoil,
+            )
+            for section in vlm_sections
+        ]
+        return (
+            asb.Wing(
+                name="Flying Wing VLM",
+                xsecs=xsecs,
+                symmetric=True,
+            ),
+            vlm_sections,
+        )
+
+    def _run_stable_vlm(
+        self,
+        velocity: float,
+        alpha: float,
+        xyz_ref: List[float],
+        altitude_m: Optional[float] = None,
+        twist_override: Optional[List[float]] = None,
+        spanwise_resolution_hint: Optional[int] = None,
+        chordwise_resolution_hint: Optional[int] = None,
+    ) -> Tuple[asb.VortexLatticeMethod, Dict[str, Any], Dict[str, Any]]:
+        import numpy as _np_std
+
+        base_sections = self.spanwise_sections(twist_override=twist_override)
+        total_half_span = max(abs(base_sections[-1].y_m), 1e-9) if base_sections else max(self.wing_project.planform.half_span(), 1e-9)
+        atmosphere = asb.Atmosphere(
+            altitude=self.wing_project.twist_trim.cruise_altitude_m if altitude_m is None else altitude_m
+        )
+        op_point = asb.OperatingPoint(
+            atmosphere=atmosphere,
+            velocity=velocity,
+            alpha=alpha,
+        )
+
+        last_error: Optional[Exception] = None
+        attempt_errors: List[str] = []
+
+        for spacing_scale in (40.0, 24.0):
+            min_spacing = max(total_half_span / spacing_scale, 0.02)
+            wing, vlm_sections = self._build_vlm_wing(
+                twist_override=twist_override,
+                min_section_spacing_m=min_spacing,
+            )
+            airplane = asb.Airplane(
+                name=self.wing_project.name,
+                wings=[wing],
+                xyz_ref=xyz_ref,
+            )
+
+            xsec_count = len(vlm_sections)
+            sr_primary = max(4, min(6, xsec_count // 4))
+            sr_secondary = max(4, min(8, xsec_count // 3))
+
+            candidate_settings: List[Tuple[int, int]] = []
+            if spanwise_resolution_hint is not None or chordwise_resolution_hint is not None:
+                hinted_sr = sr_primary if spanwise_resolution_hint is None else min(max(4, int(spanwise_resolution_hint)), 8)
+                hinted_cr = 3 if chordwise_resolution_hint is None else min(max(3, int(chordwise_resolution_hint)), 4)
+                candidate_settings.append((hinted_sr, hinted_cr))
+            candidate_settings.extend(
+                [
+                    (sr_primary, 3),
+                    (sr_secondary, 3),
+                    (sr_primary, 4),
+                    (sr_secondary, 4),
+                ]
+            )
+
+            dedup_settings: List[Tuple[int, int]] = []
+            for setting in candidate_settings:
+                if setting not in dedup_settings:
+                    dedup_settings.append(setting)
+
+            for spanwise_resolution, chordwise_resolution in dedup_settings:
+                try:
+                    vlm = asb.VortexLatticeMethod(
+                        airplane=airplane,
+                        op_point=op_point,
+                        spanwise_resolution=spanwise_resolution,
+                        chordwise_resolution=chordwise_resolution,
+                    )
+                    aero_result = vlm.run()
+                    total_lift_vlm = float(aero_result.get("L", 0.0))
+                    cl_vlm = float(aero_result.get("CL", 0.0))
+                    forces_g = _np_std.asarray(vlm.forces_geometry)
+                    vortex_centers = _np_std.asarray(vlm.vortex_centers)
+
+                    if (
+                        not math.isfinite(cl_vlm)
+                        or not math.isfinite(total_lift_vlm)
+                        or abs(cl_vlm) > 5.0
+                        or total_lift_vlm <= 0.0
+                        or forces_g.ndim != 2
+                        or vortex_centers.ndim != 2
+                        or len(forces_g) == 0
+                        or not _np_std.all(_np_std.isfinite(forces_g))
+                        or not _np_std.all(_np_std.isfinite(vortex_centers))
+                    ):
+                        raise ValueError(f"unstable result (CL={cl_vlm:.3g}, L={total_lift_vlm:.3g})")
+
+                    return vlm, aero_result, {
+                        "spanwise_resolution": spanwise_resolution,
+                        "chordwise_resolution": chordwise_resolution,
+                        "filtered_section_count": len(vlm_sections),
+                        "original_section_count": len(base_sections),
+                        "min_section_spacing_m": min_spacing,
+                    }
+                except Exception as exc:
+                    last_error = exc
+                    attempt_errors.append(
+                        f"spacing={min_spacing:.4f} sr={spanwise_resolution} cr={chordwise_resolution}: {exc}"
+                    )
+
+        detail = "; ".join(attempt_errors[-6:]) if attempt_errors else "no attempts recorded"
+        raise ValueError(f"Could not find a stable VLM discretization. Last error: {last_error}. Attempts: {detail}")
+
+    @staticmethod
+    def _naca_thickness_distribution(x_over_c: np.ndarray, thickness_ratio: float) -> np.ndarray:
+        x = _np_std.clip(_np_std.asarray(x_over_c, dtype=float), 0.0, 1.0)
+        y_t = 5.0 * float(thickness_ratio) * (
+            0.2969 * _np_std.sqrt(_np_std.clip(x, 1e-12, 1.0))
+            - 0.1260 * x
+            - 0.3516 * x * x
+            + 0.2843 * x * x * x
+            - 0.1015 * x * x * x * x
+        )
+        return 2.0 * y_t
+
+    def _build_body_geometry_proxies(
+        self,
+        s_ref_m2: float,
+        x_samples: int = 320,
+    ) -> Dict[str, float]:
+        planform = self.wing_project.planform
+        sections = sorted(planform.body_sections, key=lambda section: section.y_pos)
+        if len(sections) < 2 or s_ref_m2 <= 0.0:
+            return {
+                "body_area_m2": 0.0,
+                "body_area_ratio": 0.0,
+                "body_camber_area_ratio": 0.0,
+                "body_mean_thickness_ratio": 0.0,
+                "body_length_m": 0.0,
+                "body_form_drag_proxy": 0.0,
+                "body_peak_cross_section_area_m2": 0.0,
+            }
+
+        body_area_one_side = 0.0
+        body_camber_area_one_side = 0.0
+        body_thickness_area_one_side = 0.0
+        x_min = min(section.x_offset for section in sections)
+        x_max = max(section.x_offset + section.chord for section in sections)
+        body_length_m = max(1e-9, x_max - x_min)
+
+        x_grid = _np_std.linspace(x_min, x_max, max(80, int(x_samples)))
+        cross_section_area = _np_std.zeros_like(x_grid)
+
+        for inboard, outboard in zip(sections[:-1], sections[1:]):
+            dy = float(outboard.y_pos - inboard.y_pos)
+            if dy <= 0.0:
+                continue
+
+            chord_m = 0.5 * float(inboard.chord + outboard.chord)
+            x_le_m = 0.5 * float(inboard.x_offset + outboard.x_offset)
+            airfoil_inboard = self._get_airfoil(inboard.airfoil)
+            airfoil_outboard = self._get_airfoil(outboard.airfoil)
+
+            try:
+                max_camber = 0.5 * (float(airfoil_inboard.max_camber()) + float(airfoil_outboard.max_camber()))
+            except Exception:
+                max_camber = 0.0
+            try:
+                thickness_ratio = 0.5 * (
+                    float(airfoil_inboard.max_thickness()) + float(airfoil_outboard.max_thickness())
+                )
+            except Exception:
+                thickness_ratio = 0.0
+
+            body_area_one_side += chord_m * dy
+            body_camber_area_one_side += chord_m * max_camber * dy
+            body_thickness_area_one_side += chord_m * thickness_ratio * dy
+
+            local_mask = (x_grid >= x_le_m) & (x_grid <= x_le_m + chord_m)
+            if not _np_std.any(local_mask):
+                continue
+
+            x_local = (x_grid[local_mask] - x_le_m) / max(chord_m, 1e-9)
+            local_thickness = self._naca_thickness_distribution(x_local, thickness_ratio) * chord_m
+            cross_section_area[local_mask] += 2.0 * dy * local_thickness
+
+        body_area_m2 = 2.0 * body_area_one_side
+        body_camber_area_ratio = 2.0 * body_camber_area_one_side / s_ref_m2
+        body_mean_thickness_ratio = (2.0 * body_thickness_area_one_side / body_area_m2) if body_area_m2 > 0.0 else 0.0
+        dA_dx = _np_std.gradient(cross_section_area, x_grid)
+        body_form_drag_proxy = float(_np_std.trapezoid(dA_dx * dA_dx, x_grid)) / max(s_ref_m2 * body_length_m, 1e-9)
+
+        return {
+            "body_area_m2": float(body_area_m2),
+            "body_area_ratio": float(body_area_m2 / s_ref_m2),
+            "body_camber_area_ratio": float(body_camber_area_ratio),
+            "body_mean_thickness_ratio": float(body_mean_thickness_ratio),
+            "body_length_m": float(body_length_m),
+            "body_form_drag_proxy": float(body_form_drag_proxy),
+            "body_peak_cross_section_area_m2": float(_np_std.max(cross_section_area)) if len(cross_section_area) else 0.0,
+        }
+
+    @staticmethod
+    def _compute_pressure_proxy_from_strip_rows(
+        strip_rows: List[Dict[str, float]],
+        s_ref_m2: float,
+    ) -> float:
+        if len(strip_rows) < 2 or s_ref_m2 <= 0.0:
+            return 0.0
+        y = _np_std.asarray([float(row["y_m"]) for row in strip_rows], dtype=float)
+        chord = _np_std.asarray([float(row["chord_m"]) for row in strip_rows], dtype=float)
+        proximity = _np_std.asarray(
+            [float(row["onset_proximity"]) * float(row["thickness_factor"]) for row in strip_rows],
+            dtype=float,
+        )
+        return 2.0 * float(_np_std.trapezoid(chord * proximity, y)) / max(s_ref_m2, 1e-9)
+
+    def _evaluate_local_section_onset(
+        self,
+        airfoil: Any,
+        cl_target: float,
+        reynolds: float,
+        mach: float,
+        alpha_grid: np.ndarray,
+        polar_cache: Dict[Tuple[str, int, int], Dict[str, _np_std.ndarray]],
+        sep_slope_fraction: float = 0.7,
+        sep_thickness_start: float = 0.08,
+        sep_thickness_full: float = 0.14,
+        drag_rise_alpha_window: float = 4.0,
+    ) -> Dict[str, float]:
+        cache_key = (
+            str(getattr(airfoil, "name", "airfoil")),
+            int(round(reynolds / 5000.0)),
+            int(round(mach * 1000.0)),
+        )
+        if cache_key not in polar_cache:
+            reynolds_array = _np_std.full_like(alpha_grid, fill_value=float(reynolds), dtype=float)
+            mach_array = _np_std.full_like(alpha_grid, fill_value=float(mach), dtype=float)
+            aero = airfoil.get_aero_from_neuralfoil(alpha=alpha_grid, Re=reynolds_array, mach=mach_array)
+            polar_cache[cache_key] = {
+                "alpha_deg": _np_std.asarray(alpha_grid, dtype=float).copy(),
+                "CL": _np_std.asarray(aero["CL"], dtype=float),
+            }
+
+        polar = polar_cache[cache_key]
+        cl_values = polar["CL"]
+        alpha_values = polar["alpha_deg"]
+
+        nearest_idx = int(_np_std.argmin(_np_std.abs(cl_values - cl_target)))
+        alpha_eff = float(alpha_values[nearest_idx])
+        dcl_dalpha = _np_std.gradient(cl_values, alpha_values)
+        linear_mask = (alpha_values >= -1.0) & (alpha_values <= 4.0)
+        if _np_std.any(linear_mask):
+            reference_slope = float(_np_std.median(dcl_dalpha[linear_mask]))
+        else:
+            reference_slope = float(_np_std.max(dcl_dalpha))
+        if not math.isfinite(reference_slope) or abs(reference_slope) < 1e-9:
+            reference_slope = float(_np_std.max(dcl_dalpha))
+
+        slope_limit = sep_slope_fraction * reference_slope
+        sep_candidates = _np_std.where((alpha_values > 0.0) & (dcl_dalpha < slope_limit))[0]
+        alpha_sep = float(alpha_values[int(sep_candidates[0])]) if len(sep_candidates) > 0 else float(alpha_values[-1])
+        alpha_margin = alpha_sep - alpha_eff
+
+        try:
+            thickness_ratio = float(airfoil.max_thickness())
+        except Exception:
+            thickness_ratio = 0.0
+
+        if sep_thickness_full <= sep_thickness_start:
+            thickness_factor = 1.0 if thickness_ratio > sep_thickness_start else 0.0
+        else:
+            thickness_factor = float(
+                _np_std.clip(
+                    (thickness_ratio - sep_thickness_start) / (sep_thickness_full - sep_thickness_start),
+                    0.0,
+                    1.0,
+                )
+            )
+
+        if drag_rise_alpha_window <= 1e-9:
+            onset_proximity = 1.0 if alpha_margin <= 0.0 else 0.0
+        else:
+            onset_proximity = float(_np_std.clip(1.0 - alpha_margin / drag_rise_alpha_window, 0.0, 1.0))
+
+        return {
+            "onset_proximity": onset_proximity,
+            "thickness_factor": thickness_factor,
+        }
+
+    def _compute_spanload_pressure_proxy(
+        self,
+        y_half: np.ndarray,
+        lift_per_span_half: np.ndarray,
+        velocity: float,
+        q: float,
+        altitude_m: Optional[float],
+        s_ref_m2: float,
+    ) -> float:
+        if len(y_half) < 2 or q <= 0.0 or s_ref_m2 <= 0.0:
+            return 0.0
+
+        atmosphere = asb.Atmosphere(
+            altitude=self.wing_project.twist_trim.cruise_altitude_m if altitude_m is None else altitude_m
+        )
+        rho = float(atmosphere.density())
+        mu = float(atmosphere.dynamic_viscosity())
+        speed_of_sound = float(atmosphere.speed_of_sound())
+        mach = float(velocity) / max(speed_of_sound, 1e-9)
+        alpha_grid = _np_std.linspace(-8.0, 20.0, 113)
+
+        sections = self.spanwise_sections()
+        sec_y = _np_std.asarray([abs(section.y_m) for section in sections], dtype=float)
+        sec_chord = _np_std.asarray([section.chord_m for section in sections], dtype=float)
+        polar_cache: Dict[Tuple[str, int, int], Dict[str, _np_std.ndarray]] = {}
+        strip_rows: List[Dict[str, float]] = []
+
+        for idx, y_value in enumerate(y_half):
+            chord_m = float(_np_std.interp(y_value, sec_y, sec_chord))
+            chord_m = max(chord_m, 1e-6)
+            nearest_section_index = int(_np_std.argmin(_np_std.abs(sec_y - y_value)))
+            airfoil = sections[nearest_section_index].airfoil
+            cl_local = float(lift_per_span_half[idx] / max(q * chord_m, 1e-9))
+            reynolds = float(rho * velocity * chord_m / max(mu, 1e-12))
+            local = self._evaluate_local_section_onset(
+                airfoil=airfoil,
+                cl_target=cl_local,
+                reynolds=reynolds,
+                mach=mach,
+                alpha_grid=alpha_grid,
+                polar_cache=polar_cache,
+            )
+            strip_rows.append(
+                {
+                    "y_m": float(y_value),
+                    "chord_m": chord_m,
+                    "onset_proximity": float(local["onset_proximity"]),
+                    "thickness_factor": float(local["thickness_factor"]),
+                }
+            )
+
+        return self._compute_pressure_proxy_from_strip_rows(strip_rows, s_ref_m2=s_ref_m2)
+
+    def _compute_body_cl0_proxy(
+        self,
+        velocity: float,
+        altitude_m: Optional[float],
+        s_ref_m2: float,
+    ) -> float:
+        if s_ref_m2 <= 0.0:
+            return 0.0
+
+        sections = sorted(self.wing_project.planform.body_sections, key=lambda section: section.y_pos)
+        if len(sections) < 2:
+            return 0.0
+
+        atmosphere = asb.Atmosphere(
+            altitude=self.wing_project.twist_trim.cruise_altitude_m if altitude_m is None else altitude_m
+        )
+        rho = float(atmosphere.density())
+        mu = float(atmosphere.dynamic_viscosity())
+        speed_of_sound = float(atmosphere.speed_of_sound())
+        mach = float(velocity) / max(speed_of_sound, 1e-9)
+
+        body_cl0_area = 0.0
+        for inboard, outboard in zip(sections[:-1], sections[1:]):
+            dy = float(outboard.y_pos - inboard.y_pos)
+            if dy <= 0.0:
+                continue
+            chord_m = 0.5 * float(inboard.chord + outboard.chord)
+            reynolds = rho * float(velocity) * chord_m / max(mu, 1e-12)
+            airfoil_inboard = self._get_airfoil(inboard.airfoil)
+            airfoil_outboard = self._get_airfoil(outboard.airfoil)
+            aero_inboard = airfoil_inboard.get_aero_from_neuralfoil(alpha=0.0, Re=reynolds, mach=mach)
+            aero_outboard = airfoil_outboard.get_aero_from_neuralfoil(alpha=0.0, Re=reynolds, mach=mach)
+            cl0 = 0.5 * (float(aero_inboard.get("CL", 0.0)) + float(aero_outboard.get("CL", 0.0)))
+            body_cl0_area += 2.0 * cl0 * chord_m * dy
+
+        return float(body_cl0_area) / s_ref_m2
+
+    @staticmethod
+    def _compute_body_symmetry_factor(body_cl0_proxy: float, body_proxies: Dict[str, float]) -> float:
+        cl0_scale = 0.04
+        camber_area_scale = 0.005
+        camber_area_ratio = abs(float(body_proxies.get("body_camber_area_ratio", 0.0)))
+        symmetry_factor = math.exp(-abs(float(body_cl0_proxy)) / cl0_scale) * math.exp(-camber_area_ratio / camber_area_scale)
+        return float(_np_std.clip(symmetry_factor, 0.0, 1.0))
+
+    def _build_blind_body_model_parameters(self, body_proxies: Dict[str, float]) -> Dict[str, float]:
+        sweep_deg = float(self.wing_project.planform.sweep_le_deg)
+        sweep_cos = max(0.05, math.cos(math.radians(sweep_deg)))
+        mean_thickness = max(0.0, float(body_proxies.get("body_mean_thickness_ratio", 0.0)))
+        body_length = max(1e-9, float(body_proxies.get("body_length_m", 0.0)))
+        peak_cross_section_area = max(0.0, float(body_proxies.get("body_peak_cross_section_area_m2", 0.0)))
+        bluffness_ratio = math.sqrt(peak_cross_section_area) / body_length
+        form_factor_extra = max(0.0, 2.0 * mean_thickness + 60.0 * mean_thickness**4)
+        pressure_decay = max(1e-6, 0.75 * mean_thickness)
+        return {
+            "sweep_cosine": sweep_cos,
+            "drag_form_factor_extra": form_factor_extra,
+            "pressure_decay_scale": pressure_decay,
+            "body_bluffness_ratio": bluffness_ratio,
+            "cambered_lift_scale": 0.96,
+            "alpha_break_sweep_factor": 0.096,
+            "alpha_relief_gain": 4.1,
+            "symmetric_drag_floor": 0.205,
+            "symmetric_form_drag_gain": 2.2,
+            "cambered_drag_alpha_gain": 1.8,
+            "relief_region_mode": "chord_0.55",
+            "relief_onset_floor": 0.15,
+            "relief_onset_power": 2.0,
+            "relief_root_power": 0.5,
+            "relief_cap_fraction": 0.95,
+            "relief_target_scale": 1.0,
+        }
+
+    @staticmethod
+    def _compute_relief_region_end(
+        y_half: np.ndarray,
+        chord_half: np.ndarray,
+        body_y_max: float,
+        region_mode: str,
+    ) -> float:
+        y_half = _np_std.asarray(y_half, dtype=float)
+        chord_half = _np_std.asarray(chord_half, dtype=float)
+        if len(y_half) == 0:
+            return max(body_y_max, 1e-9)
+        if region_mode == "body":
+            return max(body_y_max, 1e-9)
+        if region_mode.startswith("chord_"):
+            chord_fraction = float(region_mode.split("_", 1)[1])
+            root_chord = max(float(chord_half[0]), 1e-9)
+            mask = chord_half >= chord_fraction * root_chord
+            if _np_std.any(mask):
+                last_idx = int(_np_std.where(mask)[0][-1])
+                return max(body_y_max, float(y_half[last_idx]))
+            return max(body_y_max, 1e-9)
+        if region_mode.startswith("span_"):
+            span_fraction = float(region_mode.split("_", 1)[1])
+            return max(body_y_max, span_fraction * float(y_half[-1]))
+        return max(body_y_max, 1e-9)
+
+    def _build_body_section_zero_alpha_data(
+        self,
+        velocity: float,
+        altitude_m: Optional[float],
+    ) -> Dict[str, Any]:
+        sections = sorted(self.wing_project.planform.body_sections, key=lambda section: section.y_pos)
+        if len(sections) < 2:
+            return {
+                "y_m": _np_std.asarray([], dtype=float),
+                "chord_m": _np_std.asarray([], dtype=float),
+                "x_le_m": _np_std.asarray([], dtype=float),
+                "cl0": _np_std.asarray([], dtype=float),
+                "camber_ratio": _np_std.asarray([], dtype=float),
+                "thickness_ratio": _np_std.asarray([], dtype=float),
+                "airfoils": [],
+                "mean_body_chord_m": 0.0,
+            }
+
+        atmosphere = asb.Atmosphere(
+            altitude=self.wing_project.twist_trim.cruise_altitude_m if altitude_m is None else altitude_m
+        )
+        rho = float(atmosphere.density())
+        mu = float(atmosphere.dynamic_viscosity())
+        speed_of_sound = float(atmosphere.speed_of_sound())
+        mach = float(velocity) / max(speed_of_sound, 1e-9)
+
+        y_values = []
+        chord_values = []
+        x_le_values = []
+        cl0_values = []
+        camber_values = []
+        thickness_values = []
+        airfoils = []
+
+        for section in sections:
+            chord_m = max(float(section.chord), 1e-6)
+            airfoil = self._get_airfoil(section.airfoil)
+            reynolds = rho * float(velocity) * chord_m / max(mu, 1e-12)
+            aero = airfoil.get_aero_from_neuralfoil(alpha=0.0, Re=reynolds, mach=mach)
+            try:
+                camber_ratio = float(airfoil.max_camber())
+            except Exception:
+                camber_ratio = 0.0
+            try:
+                thickness_ratio = float(airfoil.max_thickness())
+            except Exception:
+                thickness_ratio = 0.0
+
+            y_values.append(float(section.y_pos))
+            chord_values.append(chord_m)
+            x_le_values.append(float(section.x_offset))
+            cl0_values.append(float(aero.get("CL", 0.0)))
+            camber_values.append(camber_ratio)
+            thickness_values.append(thickness_ratio)
+            airfoils.append(airfoil)
+
+        chord_array = _np_std.asarray(chord_values, dtype=float)
+        return {
+            "y_m": _np_std.asarray(y_values, dtype=float),
+            "chord_m": chord_array,
+            "x_le_m": _np_std.asarray(x_le_values, dtype=float),
+            "cl0": _np_std.asarray(cl0_values, dtype=float),
+            "camber_ratio": _np_std.asarray(camber_values, dtype=float),
+            "thickness_ratio": _np_std.asarray(thickness_values, dtype=float),
+            "airfoils": airfoils,
+            "mean_body_chord_m": float(_np_std.mean(chord_array)) if len(chord_array) else 0.0,
+        }
+
+    def _build_distributed_blind_body_lift_delta(
+        self,
+        y_half: np.ndarray,
+        lift_per_span_half: np.ndarray,
+        velocity: float,
+        alpha: float,
+        load_factor: float,
+        altitude_m: Optional[float],
+        q: float,
+        s_ref_m2: float,
+        blind_parameters: Optional[Dict[str, float]] = None,
+        strip_rows: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        y_half = _np_std.asarray(y_half, dtype=float)
+        lift_per_span_half = _np_std.asarray(lift_per_span_half, dtype=float)
+        zero = _np_std.zeros_like(lift_per_span_half, dtype=float)
+        if len(self.wing_project.planform.body_sections) < 2:
+            return {
+                "delta_lift_per_span_half": zero,
+                "body_strip_rows": [],
+                "pressure_proxy": 0.0,
+                "symmetry_factor": 0.0,
+                "body_cl0_proxy": 0.0,
+                "lift_retention": 0.0,
+                "cambered_delta_cl": 0.0,
+                "relief_delta_cl": 0.0,
+                "delta_cl_total": 0.0,
+            }
+        if len(y_half) < 2 or q <= 0.0 or s_ref_m2 <= 0.0:
+            return {
+                "delta_lift_per_span_half": zero,
+                "body_strip_rows": [],
+                "pressure_proxy": 0.0,
+                "symmetry_factor": 0.0,
+                "body_cl0_proxy": 0.0,
+                "lift_retention": 0.0,
+                "cambered_delta_cl": 0.0,
+                "relief_delta_cl": 0.0,
+                "delta_cl_total": 0.0,
+            }
+
+        body_proxies = self._build_body_geometry_proxies(s_ref_m2=s_ref_m2)
+        if body_proxies["body_area_ratio"] <= 0.0:
+            return {
+                "delta_lift_per_span_half": zero,
+                "body_strip_rows": [],
+                "pressure_proxy": 0.0,
+                "symmetry_factor": 0.0,
+                "body_cl0_proxy": 0.0,
+                "lift_retention": 0.0,
+                "cambered_delta_cl": 0.0,
+                "relief_delta_cl": 0.0,
+                "delta_cl_total": 0.0,
+            }
+
+        if blind_parameters is None:
+            blind_parameters = self._build_blind_body_model_parameters(body_proxies)
+        body_section_data = self._build_body_section_zero_alpha_data(
+            velocity=velocity,
+            altitude_m=altitude_m,
+        )
+        body_y = body_section_data["y_m"]
+        if len(body_y) < 2:
+            return {
+                "delta_lift_per_span_half": zero,
+                "body_strip_rows": [],
+                "pressure_proxy": 0.0,
+                "symmetry_factor": 0.0,
+                "body_cl0_proxy": 0.0,
+                "lift_retention": 0.0,
+                "cambered_delta_cl": 0.0,
+                "relief_delta_cl": 0.0,
+                "delta_cl_total": 0.0,
+            }
+
+        atmosphere = asb.Atmosphere(
+            altitude=self.wing_project.twist_trim.cruise_altitude_m if altitude_m is None else altitude_m
+        )
+        rho = float(atmosphere.density())
+        mu = float(atmosphere.dynamic_viscosity())
+        speed_of_sound = float(atmosphere.speed_of_sound())
+        mach = float(velocity) / max(speed_of_sound, 1e-9)
+        alpha_grid = _np_std.linspace(-8.0, 20.0, 113)
+        polar_cache: Dict[Tuple[str, int, int], Dict[str, _np_std.ndarray]] = {}
+
+        pressure_proxy = self._compute_spanload_pressure_proxy(
+            y_half=y_half,
+            lift_per_span_half=lift_per_span_half,
+            velocity=velocity,
+            q=q,
+            altitude_m=altitude_m,
+            s_ref_m2=s_ref_m2,
+        )
+        body_cl0_proxy = self._compute_body_cl0_proxy(
+            velocity=velocity,
+            altitude_m=altitude_m,
+            s_ref_m2=s_ref_m2,
+        )
+        symmetry_factor = self._compute_body_symmetry_factor(body_cl0_proxy, body_proxies)
+        sweep_cos = float(blind_parameters["sweep_cosine"])
+        cambered_lift_scale = max(0.0, float(blind_parameters.get("cambered_lift_scale", 1.0)))
+        alpha_break_factor = max(1e-6, float(blind_parameters.get("alpha_break_sweep_factor", 0.096)))
+        alpha_break_deg = max(0.5, alpha_break_factor * float(self.wing_project.planform.sweep_le_deg))
+        lift_retention = float(_np_std.clip(1.0 - (float(alpha) / alpha_break_deg) ** 2, -0.75, 1.25))
+        cambered_body_delta_cl = cambered_lift_scale * body_cl0_proxy * sweep_cos * lift_retention
+        raw_relief_target_cl = (
+            -symmetry_factor
+            * float(blind_parameters["alpha_relief_gain"])
+            * abs(float(alpha))
+            * pressure_proxy
+            * float(body_proxies["body_form_drag_proxy"])
+            / max(sweep_cos, 0.05)
+        )
+        relief_target_scale = max(0.0, float(blind_parameters.get("relief_target_scale", 1.0)))
+        cambered_half_lift_target = cambered_body_delta_cl * q * s_ref_m2 * 0.5 * load_factor
+        relief_half_lift_target = raw_relief_target_cl * q * s_ref_m2 * 0.5 * load_factor * relief_target_scale
+
+        mean_body_chord = max(float(body_section_data["mean_body_chord_m"]), 1e-6)
+        body_y_max = float(body_y[-1])
+
+        cambered_basis = _np_std.zeros_like(lift_per_span_half, dtype=float)
+        relief_shape = _np_std.zeros_like(lift_per_span_half, dtype=float)
+        body_strip_rows: List[Dict[str, float]] = []
+
+        sections = [section for section in self.spanwise_sections() if float(section.y_m) >= -1e-9]
+        sections = sorted(sections, key=lambda section: float(section.y_m))
+        if len(sections) < 2:
+            return {
+                "delta_lift_per_span_half": zero,
+                "body_strip_rows": [],
+                "pressure_proxy": float(pressure_proxy),
+                "symmetry_factor": float(symmetry_factor),
+                "body_cl0_proxy": float(body_cl0_proxy),
+                "lift_retention": float(lift_retention),
+                "cambered_delta_cl": 0.0,
+                "relief_delta_cl": 0.0,
+                "delta_cl_total": 0.0,
+            }
+
+        section_y = _np_std.asarray([float(section.y_m) for section in sections], dtype=float)
+        section_chord = _np_std.asarray([float(section.chord_m) for section in sections], dtype=float)
+        section_x_le = _np_std.asarray([float(section.x_le_m) for section in sections], dtype=float)
+        section_thickness = []
+        section_airfoils = []
+        for section in sections:
+            section_airfoils.append(section.airfoil)
+            try:
+                section_thickness.append(float(section.airfoil.max_thickness()))
+            except Exception:
+                section_thickness.append(0.0)
+        section_thickness = _np_std.asarray(section_thickness, dtype=float)
+
+        chord_half = _np_std.zeros_like(y_half, dtype=float)
+        onset_half = _np_std.zeros_like(y_half, dtype=float)
+        thickness_half = _np_std.zeros_like(y_half, dtype=float)
+        supplied_y = None
+        supplied_chord = None
+        supplied_onset = None
+        supplied_thickness = None
+        if strip_rows:
+            supplied_y = _np_std.asarray([float(row.get("y_m", 0.0) or 0.0) for row in strip_rows], dtype=float)
+            supplied_chord = _np_std.asarray([float(row.get("chord_m", 0.0) or 0.0) for row in strip_rows], dtype=float)
+            supplied_onset = _np_std.asarray([float(row.get("onset_proximity", 0.0) or 0.0) for row in strip_rows], dtype=float)
+            supplied_thickness = _np_std.asarray(
+                [float(row.get("thickness_factor", 0.0) or 0.0) for row in strip_rows],
+                dtype=float,
+            )
+            if (
+                len(supplied_y) != len(strip_rows)
+                or len(supplied_y) == 0
+                or len(supplied_y) != len(supplied_chord)
+                or len(supplied_y) != len(supplied_onset)
+                or len(supplied_y) != len(supplied_thickness)
+            ):
+                supplied_y = None
+                supplied_chord = None
+                supplied_onset = None
+                supplied_thickness = None
+        region_mode = str(blind_parameters.get("relief_region_mode", "chord_0.55"))
+        onset_floor = max(0.0, float(blind_parameters.get("relief_onset_floor", 0.15)))
+        onset_power = max(0.0, float(blind_parameters.get("relief_onset_power", 2.0)))
+        root_power = max(0.0, float(blind_parameters.get("relief_root_power", 0.5)))
+        cap_fraction = float(_np_std.clip(float(blind_parameters.get("relief_cap_fraction", 0.95)), 0.0, 0.999))
+
+        for idx, y_value in enumerate(y_half):
+            wing_hi = int(_np_std.searchsorted(section_y, y_value, side="right"))
+            wing_idx = min(max(wing_hi - 1, 0), len(section_y) - 2)
+            wy0 = float(section_y[wing_idx])
+            wy1 = float(section_y[wing_idx + 1])
+            wing_dy = max(wy1 - wy0, 1e-9)
+            wing_blend = float(_np_std.clip((y_value - wy0) / wing_dy, 0.0, 1.0))
+
+            wing_chord = (1.0 - wing_blend) * float(section_chord[wing_idx]) + wing_blend * float(section_chord[wing_idx + 1])
+            wing_chord = max(wing_chord, 1e-6)
+            wing_x0 = float(section_x_le[wing_idx])
+            wing_x1 = float(section_x_le[wing_idx + 1])
+            local_sweep_deg = abs(math.degrees(math.atan2(wing_x1 - wing_x0, wing_dy)))
+            local_airfoil_index = wing_idx if wing_blend < 0.5 else wing_idx + 1
+            local_airfoil = section_airfoils[local_airfoil_index]
+            local_thickness = (
+                (1.0 - wing_blend) * float(section_thickness[wing_idx])
+                + wing_blend * float(section_thickness[wing_idx + 1])
+            )
+            local_thickness = max(local_thickness, 0.0)
+
+            if supplied_y is not None:
+                wing_chord = max(
+                    1e-6,
+                    float(_np_std.interp(y_value, supplied_y, supplied_chord, left=supplied_chord[0], right=supplied_chord[-1])),
+                )
+                onset_value = float(_np_std.interp(y_value, supplied_y, supplied_onset, left=supplied_onset[0], right=supplied_onset[-1]))
+                thickness_value = float(
+                    _np_std.interp(y_value, supplied_y, supplied_thickness, left=supplied_thickness[0], right=supplied_thickness[-1])
+                )
+                local_onset = {
+                    "onset_proximity": onset_value,
+                    "thickness_factor": thickness_value,
+                }
+                local_thickness = thickness_value
+            else:
+                cl_local = float(lift_per_span_half[idx] / max(q * wing_chord, 1e-9))
+                reynolds = float(rho * velocity * wing_chord / max(mu, 1e-12))
+                local_onset = self._evaluate_local_section_onset(
+                    airfoil=local_airfoil,
+                    cl_target=cl_local,
+                    reynolds=reynolds,
+                    mach=mach,
+                    alpha_grid=alpha_grid,
+                    polar_cache=polar_cache,
+                )
+
+            chord_half[idx] = wing_chord
+            thickness_half[idx] = max(local_thickness, 0.0)
+            onset_half[idx] = float(local_onset["onset_proximity"])
+
+            if y_value < float(body_y[0]) - 1e-9 or y_value > body_y_max + 1e-9:
+                body_strip_rows.append(
+                    {
+                        "y_m": float(y_value),
+                        "chord_m": wing_chord,
+                        "body_chord_m": 0.0,
+                        "body_cl0_local": 0.0,
+                        "body_sweep_deg": float(local_sweep_deg),
+                        "body_thickness_ratio": float(local_thickness),
+                        "onset_proximity": float(local_onset["onset_proximity"]),
+                        "thickness_factor": float(local_onset["thickness_factor"]),
+                        "cambered_basis": 0.0,
+                        "relief_shape": 0.0,
+                    }
+                )
+                continue
+
+            seg_hi = int(_np_std.searchsorted(body_y, y_value, side="right"))
+            seg_idx = min(max(seg_hi - 1, 0), len(body_y) - 2)
+            y0 = float(body_y[seg_idx])
+            y1 = float(body_y[seg_idx + 1])
+            dy = max(y1 - y0, 1e-9)
+            blend = float(_np_std.clip((y_value - y0) / dy, 0.0, 1.0))
+
+            chord0 = float(body_section_data["chord_m"][seg_idx])
+            chord1 = float(body_section_data["chord_m"][seg_idx + 1])
+            x0 = float(body_section_data["x_le_m"][seg_idx])
+            x1 = float(body_section_data["x_le_m"][seg_idx + 1])
+            cl0_0 = float(body_section_data["cl0"][seg_idx])
+            cl0_1 = float(body_section_data["cl0"][seg_idx + 1])
+
+            chord_m = (1.0 - blend) * chord0 + blend * chord1
+            chord_m = max(chord_m, 1e-6)
+            local_cl0 = (1.0 - blend) * cl0_0 + blend * cl0_1
+            cambered_basis[idx] = chord_m * max(abs(local_cl0), 1e-6)
+            body_strip_rows.append(
+                {
+                    "y_m": float(y_value),
+                    "chord_m": wing_chord,
+                    "body_chord_m": chord_m,
+                    "body_cl0_local": float(local_cl0),
+                    "body_sweep_deg": float(local_sweep_deg),
+                    "body_thickness_ratio": float(local_thickness),
+                    "onset_proximity": float(local_onset["onset_proximity"]),
+                    "thickness_factor": float(local_onset["thickness_factor"]),
+                    "cambered_basis": float(cambered_basis[idx]),
+                    "relief_shape": 0.0,
+                }
+            )
+
+        y_end = self._compute_relief_region_end(
+            y_half=y_half,
+            chord_half=chord_half,
+            body_y_max=body_y_max,
+            region_mode=region_mode,
+        )
+        region_mask = y_half <= y_end + 1e-9
+        root_eta = _np_std.zeros_like(y_half, dtype=float)
+        if y_end > 1e-9:
+            root_eta = _np_std.clip(y_half / y_end, 0.0, 1.0)
+        root_mask = _np_std.clip(1.0 - root_eta, 0.0, 1.0) ** root_power
+        onset_shape = _np_std.maximum(onset_half, onset_floor) ** onset_power
+        thickness_shape = _np_std.maximum(thickness_half, 0.15)
+        relief_shape = _np_std.where(region_mask, onset_shape * thickness_shape * root_mask, 0.0)
+        for idx, row in enumerate(body_strip_rows):
+            row["relief_shape"] = float(relief_shape[idx])
+
+        cambered_lift_per_span = _np_std.zeros_like(lift_per_span_half, dtype=float)
+        relief_lift_per_span = _np_std.zeros_like(lift_per_span_half, dtype=float)
+        cambered_basis_integral = float(_np_std.trapezoid(cambered_basis, y_half))
+        if abs(cambered_half_lift_target) > 1e-9 and cambered_basis_integral > 1e-9:
+            cambered_lift_per_span = cambered_half_lift_target * cambered_basis / cambered_basis_integral
+
+        base_lift = _np_std.maximum(lift_per_span_half, 0.0)
+        target_relief_half = max(0.0, abs(relief_half_lift_target))
+        applied_relief_half = 0.0
+        relief_fraction = _np_std.zeros_like(y_half, dtype=float)
+        if target_relief_half > 1e-9 and _np_std.any(relief_shape > 0.0):
+            def relieved_half_lift(scale: float) -> float:
+                trial_fraction = _np_std.minimum(cap_fraction, scale * relief_shape)
+                return float(_np_std.trapezoid(trial_fraction * base_lift, y_half))
+
+            max_possible_half = relieved_half_lift(1.0e6)
+            applied_relief_half = min(target_relief_half, max_possible_half)
+            scale_lo = 0.0
+            scale_hi = 1.0
+            while relieved_half_lift(scale_hi) < applied_relief_half and scale_hi < 1.0e6:
+                scale_hi *= 2.0
+            for _ in range(60):
+                scale_mid = 0.5 * (scale_lo + scale_hi)
+                if relieved_half_lift(scale_mid) >= applied_relief_half:
+                    scale_hi = scale_mid
+                else:
+                    scale_lo = scale_mid
+            relief_fraction = _np_std.minimum(cap_fraction, scale_hi * relief_shape)
+            applied_relief_half = float(_np_std.trapezoid(relief_fraction * base_lift, y_half))
+            relief_lift_per_span = -relief_fraction * base_lift
+
+        applied_delta = cambered_lift_per_span + relief_lift_per_span
+
+        cambered_half_lift = float(_np_std.trapezoid(cambered_lift_per_span, y_half))
+        relief_half_lift = -applied_relief_half
+        applied_half_lift = float(_np_std.trapezoid(applied_delta, y_half))
+        q_s = max(q * s_ref_m2, 1e-9)
+
+        return {
+            "delta_lift_per_span_half": applied_delta,
+            "body_strip_rows": body_strip_rows,
+            "pressure_proxy": float(pressure_proxy),
+            "symmetry_factor": float(symmetry_factor),
+            "body_cl0_proxy": float(body_cl0_proxy),
+            "lift_retention": float(lift_retention),
+            "cambered_delta_cl": 2.0 * cambered_half_lift / q_s,
+            "relief_delta_cl": 2.0 * relief_half_lift / q_s,
+            "delta_cl_total": 2.0 * applied_half_lift / q_s,
+            "variant_relief_region_end_m": float(y_end),
+            "variant_relief_cap_fraction": float(cap_fraction),
+            "variant_target_scale": float(relief_target_scale),
+            "variant_shape_integral": float(_np_std.trapezoid(relief_shape, y_half)),
+        }
+
+    def _build_body_spanload_weight(
+        self,
+        y_half: np.ndarray,
+        bias_power: float = 0.0,
+    ) -> np.ndarray:
+        sections = sorted(self.wing_project.planform.body_sections, key=lambda section: section.y_pos)
+        if len(sections) < 2:
+            return np.zeros_like(y_half)
+
+        body_y = _np_std.asarray([float(section.y_pos) for section in sections], dtype=float)
+        body_chord = _np_std.asarray([float(section.chord) for section in sections], dtype=float)
+        max_body_y = max(float(body_y[-1]), 1e-9)
+        weights = _np_std.zeros_like(y_half, dtype=float)
+        in_body_mask = y_half <= max_body_y
+        if _np_std.any(in_body_mask):
+            base_weight = _np_std.interp(y_half[in_body_mask], body_y, body_chord)
+            if bias_power > 0.0:
+                root_bias = _np_std.clip(1.0 - y_half[in_body_mask] / max_body_y, 0.0, 1.0) ** bias_power
+                base_weight = base_weight * (0.35 + 0.65 * root_bias)
+            weights[in_body_mask] = base_weight
+
+        integral = float(_np_std.trapezoid(weights, y_half))
+        if integral <= 1e-9:
+            return _np_std.zeros_like(y_half)
+        return weights / integral
+
+    def _apply_blind_hybrid_body_spanload(
+        self,
+        y_half: np.ndarray,
+        lift_per_span_half: np.ndarray,
+        velocity: float,
+        alpha: float,
+        load_factor: float,
+        altitude_m: Optional[float],
+        q: float,
+        s_ref_m2: float,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        if len(self.wing_project.planform.body_sections) < 2:
+            return y_half, lift_per_span_half
+        if len(y_half) < 2 or q <= 0.0 or s_ref_m2 <= 0.0:
+            return y_half, lift_per_span_half
+
+        body_proxies = self._build_body_geometry_proxies(s_ref_m2=s_ref_m2)
+        if body_proxies["body_area_ratio"] <= 0.0:
+            return y_half, lift_per_span_half
+
+        pressure_proxy = self._compute_spanload_pressure_proxy(
+            y_half=y_half,
+            lift_per_span_half=lift_per_span_half,
+            velocity=velocity,
+            q=q,
+            altitude_m=altitude_m,
+            s_ref_m2=s_ref_m2,
+        )
+        body_cl0_proxy = self._compute_body_cl0_proxy(
+            velocity=velocity,
+            altitude_m=altitude_m,
+            s_ref_m2=s_ref_m2,
+        )
+        symmetry_factor = self._compute_body_symmetry_factor(body_cl0_proxy, body_proxies)
+        blind_parameters = self._build_blind_body_model_parameters(body_proxies)
+        distributed_delta = self._build_distributed_blind_body_lift_delta(
+            y_half=y_half,
+            lift_per_span_half=lift_per_span_half,
+            velocity=velocity,
+            alpha=alpha,
+            load_factor=load_factor,
+            altitude_m=altitude_m,
+            q=q,
+            s_ref_m2=s_ref_m2,
+            blind_parameters=blind_parameters,
+        )
+        zero = _np_std.zeros_like(lift_per_span_half)
+        delta_lift_per_span = _np_std.asarray(distributed_delta.get("delta_lift_per_span_half", zero), dtype=float)
+        if not _np_std.any(_np_std.abs(delta_lift_per_span) > 1e-12):
+            return y_half, lift_per_span_half
+        adjusted = _np_std.asarray(lift_per_span_half, dtype=float) + delta_lift_per_span
+
+        print(
+            "[AeroStructural] Blind hybrid BWB spanload applied "
+            f"(dCL={float(distributed_delta.get('delta_cl_total', 0.0) or 0.0):+.4f}, "
+            f"pressure_proxy={float(distributed_delta.get('pressure_proxy', 0.0) or 0.0):.4f}, "
+            f"symmetry={float(distributed_delta.get('symmetry_factor', 0.0) or 0.0):.3f})"
+        )
+        return y_half, adjusted
+
     def visualize_flow(self, spanwise_resolution: int = 10, chordwise_resolution: int = 10) -> None:
         """
         Runs a VLM analysis and opens a 3D visualization window showing pressure distribution and streamlines.
@@ -1593,12 +2645,6 @@ class AeroSandboxService:
         static_margin = self.wing_project.twist_trim.static_margin_percent
         x_cg = x_np - (static_margin / 100.0) * mac
         xyz_ref = [x_cg, 0.0, 0.0]
-        
-        airplane = asb.Airplane(
-            name=self.wing_project.name,
-            wings=[wing],
-            xyz_ref=xyz_ref,
-        )
         
         # 2. Define Operating Point (Cruise)
         # Determine alpha
@@ -1615,7 +2661,11 @@ class AeroSandboxService:
             alpha=alpha_cruise,
         )
         analysis_ref = asb.AeroBuildup(
-            airplane=airplane,
+            airplane=asb.Airplane(
+                name=self.wing_project.name,
+                wings=[wing],
+                xyz_ref=xyz_ref,
+            ),
             op_point=op_point_ref,
         )
         res_ref = analysis_ref.run()
@@ -1627,22 +2677,21 @@ class AeroSandboxService:
         else:
             v_cruise = v_ref
             
-        op_point = asb.OperatingPoint(
-            atmosphere=self.atmosphere,
-            velocity=v_cruise,
-            alpha=alpha_cruise,
-        )
-        
         # 3. Run VLM Analysis
         # AeroBuildup doesn't support draw() with streamlines in the same way VLM does
-        vlm = asb.VortexLatticeMethod(
-            airplane=airplane,
-            op_point=op_point,
-            spanwise_resolution=spanwise_resolution,
-            chordwise_resolution=chordwise_resolution,
+        vlm, _, vlm_info = self._run_stable_vlm(
+            velocity=v_cruise,
+            alpha=alpha_cruise,
+            xyz_ref=xyz_ref,
+            spanwise_resolution_hint=spanwise_resolution,
+            chordwise_resolution_hint=chordwise_resolution,
         )
-        
-        vlm.run()
+        if vlm_info["filtered_section_count"] < vlm_info["original_section_count"]:
+            print(
+                "[AeroStructural] Visualizer using VLM-safe section filter "
+                f"({vlm_info['filtered_section_count']}/{vlm_info['original_section_count']} sections, "
+                f"min dy={vlm_info['min_section_spacing_m']:.4f} m)"
+            )
         
         # 4. Visualize
         # show_kwargs argument allows customizing the PyVista plotter if needed
@@ -1660,6 +2709,8 @@ class AeroSandboxService:
         load_factor: float = 1.0,
         n_spanwise_points: int = 50,
         use_vlm: bool = True,
+        altitude_m: Optional[float] = None,
+        analysis_method: str = "vlm",
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute the spanwise lift distribution using aerodynamic analysis.
@@ -1673,6 +2724,10 @@ class AeroSandboxService:
             load_factor: Load factor multiplier for the lift.
             n_spanwise_points: Number of points for output distribution.
             use_vlm: If True, try VLM first. If False, skip to AeroBuildup.
+            altitude_m: Optional analysis altitude [m]. Defaults to cruise altitude.
+            analysis_method: Spanload method. "vlm" uses the raw aerodynamic distribution.
+                "blind_hybrid_bwb_body" applies the blind BWB body-lift correction used by
+                the alternate low-order structural path.
         
         Returns:
             Tuple of (y_positions [m], lift_per_span [N/m]) for half-wing.
@@ -1703,12 +2758,15 @@ class AeroSandboxService:
             wings=[wing],
             xyz_ref=xyz_ref,
         )
-        
+        analysis_atmosphere = asb.Atmosphere(
+            altitude=self.wing_project.twist_trim.cruise_altitude_m if altitude_m is None else altitude_m
+        )
         op_point = asb.OperatingPoint(
-            atmosphere=self.atmosphere,
+            atmosphere=analysis_atmosphere,
             velocity=velocity,
             alpha=alpha,
         )
+        q = float(op_point.dynamic_pressure())
         
         # Calculate total half-span (including BWB body if present)
         plan = self.wing_project.planform
@@ -1726,28 +2784,26 @@ class AeroSandboxService:
         # Try VLM first - it gives us actual panel-level lift distribution
         if use_vlm:
             try:
-                # Cap spanwise resolution to avoid VLM numerical instability
-                # VLM becomes unstable at high resolution (>30-40 panels per half-span)
-                spanwise_res = min(25, max(10, n_spanwise_points // 4))
-                vlm = asb.VortexLatticeMethod(
-                    airplane=airplane,
-                    op_point=op_point,
-                    spanwise_resolution=spanwise_res,
-                    chordwise_resolution=6,
+                vlm, aero_result, vlm_info = self._run_stable_vlm(
+                    velocity=velocity,
+                    alpha=alpha,
+                    xyz_ref=xyz_ref,
+                    altitude_m=altitude_m,
+                    spanwise_resolution_hint=min(8, max(4, n_spanwise_points // 16)),
+                    chordwise_resolution_hint=3,
                 )
-                aero_result = vlm.run()
-                
-                # Get total lift from VLM result (this is the reliable value)
                 total_lift_vlm = float(aero_result.get('L', 0))
-                
-                # Sanity check: VLM can become numerically unstable
-                # If CL is unreasonable (|CL| > 5), fall back to AeroBuildup
-                cl_vlm = float(aero_result.get('CL', 0))
-                if abs(cl_vlm) > 5.0 or total_lift_vlm < 0:
-                    print(f"[AeroStructural] VLM gave unreasonable results (CL={cl_vlm:.2f}), falling back")
-                    raise ValueError("VLM numerical instability detected")
-                
                 half_lift_vlm = total_lift_vlm / 2.0  # For symmetric wing
+                if vlm_info["filtered_section_count"] < vlm_info["original_section_count"]:
+                    print(
+                        "[AeroStructural] VLM section filter applied "
+                        f"({vlm_info['filtered_section_count']}/{vlm_info['original_section_count']} sections, "
+                        f"min dy={vlm_info['min_section_spacing_m']:.4f} m)"
+                    )
+                print(
+                    "[AeroStructural] VLM panel settings "
+                    f"sr={vlm_info['spanwise_resolution']}, cr={vlm_info['chordwise_resolution']}"
+                )
                 
                 # Extract panel forces to determine the SHAPE of the distribution
                 forces_g = _np_std.array(vlm.forces_geometry)
@@ -1763,7 +2819,7 @@ class AeroSandboxService:
                 
                 # Use histogram-based binning to aggregate chordwise panels
                 # This is more robust than tolerance-based grouping
-                n_bins = spanwise_res + 1
+                n_bins = int(vlm_info["spanwise_resolution"]) + 1
                 bin_edges = _np_std.linspace(0, half_span * 1.001, n_bins + 1)  # Slightly beyond tip
                 
                 # For each bin, sum forces and get representative width
@@ -1810,7 +2866,18 @@ class AeroSandboxService:
                     
                     print(f"[AeroStructural] VLM lift distribution computed successfully")
                     print(f"  Total half-wing lift: {total_half_lift:.1f} N (expected: {half_lift_vlm * load_factor:.1f} N)")
-                    
+
+                    if analysis_method == "blind_hybrid_bwb_body":
+                        return self._apply_blind_hybrid_body_spanload(
+                            y_half=y_out,
+                            lift_per_span_half=lift_per_span,
+                            velocity=velocity,
+                            alpha=alpha,
+                            load_factor=load_factor,
+                            altitude_m=altitude_m,
+                            q=q,
+                            s_ref_m2=plan.actual_area(),
+                        )
                     return y_out, lift_per_span
                     
             except Exception as e:
@@ -1864,7 +2931,18 @@ class AeroSandboxService:
             
             print(f"[AeroStructural] AeroBuildup {lift_dist_type} distribution computed")
             print(f"  Total half-wing lift: {_np_std.trapz(lift_per_span, y_out):.1f} N")
-            
+
+            if analysis_method == "blind_hybrid_bwb_body":
+                return self._apply_blind_hybrid_body_spanload(
+                    y_half=y_out,
+                    lift_per_span_half=lift_per_span,
+                    velocity=velocity,
+                    alpha=alpha,
+                    load_factor=load_factor,
+                    altitude_m=altitude_m,
+                    q=q,
+                    s_ref_m2=plan.actual_area(),
+                )
             return y_out, lift_per_span
             
         except Exception as e:
@@ -1904,6 +2982,7 @@ class AeroSandboxService:
         alpha: Optional[float] = None,
         load_factor: float = 1.0,
         n_spanwise_points: int = 50,
+        altitude_m: Optional[float] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute the spanwise pitching moment distribution for torsion analysis.
@@ -1963,8 +3042,11 @@ class AeroSandboxService:
         # Interpolate chord to output points
         chord_interp = _np_std.interp(y_out, sec_y, sec_chord)
         
+        analysis_atmosphere = asb.Atmosphere(
+            altitude=self.wing_project.twist_trim.cruise_altitude_m if altitude_m is None else altitude_m
+        )
         # Dynamic pressure
-        rho = self.atmosphere.density()
+        rho = analysis_atmosphere.density()
         q = 0.5 * rho * velocity**2
         
         # Pitching moment coefficient (Cm0 for flying wing airfoils is typically -0.05 to -0.10)
@@ -2027,6 +3109,7 @@ class AeroSandboxService:
                 "altitude_m": 0.0,
                 "load_factor": 2.5,
             }
+        flight_condition = self.resolve_structural_flight_condition(flight_condition)
         
         load_factor = flight_condition.get("load_factor", 2.5)
         
@@ -2092,9 +3175,13 @@ class AeroSandboxService:
             
             try:
                 y_aero, lift_per_span_aero = self.get_spanwise_lift_distribution(
+                    velocity=flight_condition.get("velocity_mps"),
+                    alpha=flight_condition.get("alpha_deg"),
+                    altitude_m=flight_condition.get("altitude_m"),
                     load_factor=load_factor,
                     n_spanwise_points=100,
                     use_vlm=True,
+                    analysis_method=getattr(twist, "structural_spanload_model", "vlm"),
                 )
                 
                 # Create interpolation function for the structural solver
@@ -2205,8 +3292,11 @@ class AeroSandboxService:
             moment_distribution = None
             try:
                 y_moment, moment_per_span = self.get_spanwise_moment_distribution(
+                    velocity=flight_condition.get("velocity_mps"),
+                    alpha=flight_condition.get("alpha_deg"),
                     load_factor=load_factor,
                     n_spanwise_points=100,
+                    altitude_m=flight_condition.get("altitude_m"),
                 )
                 
                 # Create interpolation function

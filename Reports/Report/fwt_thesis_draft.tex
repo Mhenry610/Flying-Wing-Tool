@@ -1,0 +1,599 @@
+\documentclass[12pt]{report}
+\usepackage[margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{tocbibind}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{amsmath}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[numbers]{natbib}
+\graphicspath{{figures/}}
+
+\newcommand{\maybegraphic}[2][0.8\textwidth]{%
+  \IfFileExists{figures/#2}{%
+    \includegraphics[width=#1]{figures/#2}%
+  }{%
+    \fbox{\parbox[c][2.0in][c]{0.82\linewidth}{\centering\small Figure placeholder\\[0.3em]\texttt{\detokenize{#2}}}}%
+  }%
+}
+
+\setstretch{1.5}
+\setlength{\parindent}{0.5in}
+\setlength{\parskip}{0pt}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+
+\titleformat{\chapter}[display]
+  {\normalfont\bfseries\centering}
+  {\chaptername\ \thechapter}{0.5em}{}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  keepspaces=true,
+  showstringspaces=false
+}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  {\Large Preliminary Design Tool for Flying Wing Unmanned Aerial Systems\par}
+  \vspace{1.25in}
+  {\large Malik D. Henry\par}
+  \vspace{0.6in}
+  {\large North Carolina Agricultural and Technical State University\par}
+  \vspace{0.4in}
+  {\large A thesis submitted to the graduate faculty\par}
+  {\large in partial fulfillment of the requirements for the degree of\par}
+  \vspace{0.4in}
+  {\large Master of Science\par}
+  {\large Program: Mechanical Engineering\par}
+  \vspace{0.4in}
+  {\large Major Professor: John P. Kizito\par}
+  \vfill
+  {\large Greensboro, North Carolina\par}
+  {\large 2026\par}
+\end{titlepage}
+
+\pagenumbering{roman}
+
+\chapter*{Abstract}
+This thesis presents the Flying Wing Tool, a software environment for the preliminary design of tailless aircraft built around the open-source AeroSandbox ecosystem and extended with custom geometry, structural, mission, and export capabilities. The motivation is simple: flying-wing design is highly coupled, but the preliminary workflow is often fragmented. Geometry is defined in one place, aerodynamics in another, mission assumptions in a third, and export in a fourth. The result is slow iteration, weak traceability, and repeated opportunities for the aircraft definition to drift.
+
+The implemented system addresses this problem by organizing the design process around a shared project model. From that common representation, the software supports parametric geometry definition, spanwise section generation, twist-distribution synthesis, aerodynamic analysis, wingbox-oriented structural assessment, propulsion and mission evaluation, and export to downstream CAD and manufacturing formats. The central contribution of the thesis is therefore not a single new solver. Rather, it is a coherent preliminary-design workflow that keeps these capabilities connected.
+
+The manuscript is intentionally disciplined in scope. It documents capabilities that are presently implemented and inspectable in the repository, distinguishes them from areas that still require validation, and uses a representative case study to show how the workflow behaves on a concrete aircraft definition. In doing so, the thesis positions the Flying Wing Tool within the broader literature on conceptual aircraft design, low-order aerodynamics, multidisciplinary workflows, structural sizing, mission analysis, and engineering-tool interoperability.
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+\clearpage
+\pagenumbering{arabic}
+
+\chapter{Overview and Problem Statement}
+\section{Background and Motivation}
+Flying-wing aircraft continue to attract attention because they promise high aerodynamic efficiency, reduced wetted area, and favorable lift-to-drag performance. Those same advantages produce a difficult design problem. In a tailless configuration, the wing must provide not only lift but also trim authority, acceptable static stability, controllability, and a structurally practical load path. Planform choices therefore cannot be evaluated in isolation. Sweep, twist, airfoil selection, control-surface layout, and center-of-gravity targets all interact from the earliest stages of design.
+
+This coupling creates a workflow problem as much as a physics problem. In many preliminary studies, the designer moves between low-order aerodynamic tools, hand calculations or spreadsheets, mission-performance scripts, and CAD or manufacturing software. Each handoff creates an opportunity for inconsistency. Geometry may be rebuilt manually, reference quantities may drift, and assumptions that were valid in one tool may not be carried faithfully into the next. These issues exist in many aircraft projects, but they are especially pronounced for flying wings because modest geometric changes can alter trim, loading, and manufacturability at the same time.
+
+The present work was motivated by that gap. The point is not simply to add another solver to the process. The point is to provide a preliminary-design environment in which one aircraft definition can persist across geometry creation, aerodynamic analysis, structural reasoning, mission evaluation, and export. In other words, the value proposition is continuity of state across the preliminary design loop. Python is a practical foundation for such an environment because it supports rapid integration across disciplines, and AeroSandbox provides a modern basis for geometry-aware analysis and optimization-driven workflows \cite{Sharpe2021AeroSandbox,Sharpe2024Graph}.
+
+\section{Problem Definition and Research Gap}
+The core engineering problem can be stated simply: preliminary flying-wing design still lacks an open, extensible workflow that preserves consistency across geometry generation, aerodynamic analysis, structural sizing, mission evaluation, and downstream export. Existing tools are often effective within their own domains, but they usually capture only one slice of the design problem. Aerodynamic tools are fast but narrow, CAD environments are geometrically expressive but cumbersome for repeated trade studies, and mission or propulsion analyses frequently live apart from the geometry that defines the vehicle.
+
+The resulting research gap is methodological as much as technical. Early in the design process, the engineer needs to ask coupled questions and answer them without rebuilding the aircraft each time. If the planform changes, what happens to trim twist and cruise performance? If the twist distribution changes, how do structural margins and manufacturing geometry respond? If propulsion assumptions shift, how does mission feasibility move relative to the same geometry and mass model already under study? A fragmented workflow can answer these questions, but only slowly and often with poor traceability.
+
+The repository examined in this thesis addresses that gap by organizing the workflow around a shared project schema and a service-based analysis stack. The aim is not to replace every external tool. It is to establish a coherent core environment for flying-wing preliminary design, and then to export outward only when higher-fidelity analysis or downstream fabrication tasks require it.
+
+\begin{figure}[htbp]
+\centering
+\maybegraphic{workflow_fragmented_vs_integrated.png}
+\caption{Fragmented versus integrated preliminary-design workflow.}
+\label{fig:workflow-fragmented-integrated}
+\end{figure}
+
+\section{Research Question and Objectives}
+The guiding research question for the thesis is:
+
+\begin{quote}
+How can a unified software environment support parametric geometry definition, preliminary aerodynamic and structural analysis, mission-oriented evaluation, and downstream export for flying-wing aircraft without forcing the user to rebuild the aircraft model between stages?
+\end{quote}
+
+The working thesis is that a shared parametric project model, coupled to AeroSandbox-based aerodynamic methods and custom structural, mission, and export services, can substantially reduce workflow fragmentation while remaining rich enough to support meaningful preliminary design iteration.
+
+The main objectives of the work are as follows:
+\begin{enumerate}[label=\arabic*.]
+\item Develop a parametric aircraft representation that can support both conventional tailless wings and blended centerbody variants.
+\item Connect that representation to aerodynamic analysis methods suitable for rapid preliminary trade studies.
+\item Link aerodynamic outputs to structural assessment using a wingbox-oriented preliminary sizing framework.
+\item Support propulsion-aware mission reasoning inside the same project environment.
+\item Export geometry and manufacturing-oriented outputs directly from the shared aircraft representation.
+\end{enumerate}
+
+\section{Scope of the Current Draft}
+This draft is intentionally grounded in the repository as it exists at present. The text therefore distinguishes between three categories of content:
+\begin{itemize}
+\item implemented and central capabilities, which are treated as present contributions;
+\item implemented but still validation-limited capabilities, which are discussed carefully and with explicit boundaries;
+\item non-central or less mature extensions, which are deferred to future work rather than presented as completed thesis outcomes.
+\end{itemize}
+
+This distinction is important because the credibility of the manuscript depends on claim discipline. The repository already contains enough material to support a substantial thesis draft, but the argument is strongest when it remains aligned with what is currently implemented, inspectable, and reproducible in code.
+
+\section{Organization of the Thesis}
+The remainder of the manuscript proceeds as follows. Chapter 2 incorporates and extends the existing literature review assembled for the project, with emphasis on methods and tools relevant to integrated flying-wing preliminary design. Chapter 3 documents the implemented software architecture and the physical methods embedded in the current repository. Chapter 4 argues for the software contribution in workflow terms and explains why integration is itself the primary result. Chapter 5 presents a representative case study based on the \texttt{IntendedValidation2.json} project. Chapter 6 discusses validation strategy, limitations, and the boundaries of the current claims. Chapter 7 closes with the principal conclusions and the most relevant next steps. The appendices summarize repository modules and the scope assumptions used while drafting.
+
+\chapter{Expanded Literature Review}
+This chapter incorporates and adapts the repository's prior literature survey. The goal is not merely to accumulate sources, but to position the software contribution within existing work on conceptual aircraft design, low-order aerodynamic tools, multidisciplinary workflows, mission modeling, structural sizing, and interoperability.
+
+\begingroup
+\let\litsection\section
+\let\litsubsection\subsection
+\let\litsubsubsection\subsubsection
+\renewcommand{\chapter}[1]{\litsection{#1}}
+\renewcommand{\section}[1]{\litsubsection{#1}}
+\renewcommand{\subsection}[1]{\litsubsubsection{#1}}
+\input{../LitReview/src/body.tex}
+\endgroup
+
+\chapter{Implemented Software Architecture and Physical Methods}
+The literature review establishes what a useful flying-wing design environment must accomplish. This chapter turns from that external context to the implemented repository itself. The emphasis is on the code-backed architecture, the principal data contracts, and the physical methods already embodied in the software. This level of detail is warranted because the thesis contribution lies in the integration of disciplines across one computational workflow, not in a single standalone model.
+
+Two design choices define the present implementation. First, the major tasks are routed through a shared project representation that can be serialized, reloaded, and extended. Second, analysis and export are treated as services acting on that representation rather than as independent scripts with ad hoc file conventions. The result is a repository that behaves less like a loose collection of utilities and more like a preliminary-design environment with explicit internal contracts.
+
+\input{functionality_thesis_body.tex}
+
+\chapter{Integrated Workflow, Design Use Cases, and Contribution}
+\section{Shared-State Workflow as the Core Contribution}
+The strongest argument for the current software is that it organizes preliminary design around continuity of state. Geometry, analysis settings, mission assumptions, and export products all derive from the same project object rather than from isolated inputs scattered across separate tools. This is particularly valuable in flying-wing design because the important reference quantities change frequently during iteration. Wing area, aspect ratio, static-margin targets, spar placement, and control-surface extent do not remain fixed as the concept matures. A unified state model reduces the chance that one subsystem is operating on stale or inconsistent geometry.
+
+This architectural choice also improves reproducibility. A saved project file is more than a record of shape; it can retain mission configuration, analysis outputs, optimized twist distributions, structural results, and derived quantities such as center-of-gravity placement. The batch-analysis entry point reinforces this by allowing the same project file to be reloaded, analyzed, and updated without GUI-specific steps. In a thesis context, that matters because it supports traceable design studies and a credible path to future validation work.
+
+\begin{figure}[htbp]
+\centering
+\maybegraphic{shared_state_workflow.png}
+\caption{Shared-state workflow of the Flying Wing Tool.}
+\label{fig:shared-state-workflow}
+\end{figure}
+
+\section{Geometry-to-Analysis Traceability}
+The geometry workflow begins with the familiar parameters of conceptual aircraft design: area, aspect ratio, taper, sweep, dihedral, and section-level aerodynamic properties. It extends that baseline with centerbody and control-surface representations that are particularly relevant to tailless configurations. Those inputs are then converted into spanwise sections that become the common currency of the rest of the system.
+
+That traceability matters because the spanwise sections carry information that several disciplines need simultaneously. Aerodynamic analysis uses them to define planform and loading. Structural analysis uses them to define local chord, spar placement, and sectionwise load application. Export uses them to generate ribs, spars, lofted surfaces, and manufacturing geometry. By forcing these tasks to operate on a shared section model, the code reduces the risk that the aerodynamic wing and the manufactured wing diverge during iteration.
+
+The same traceability makes optimization loops more meaningful. Twist optimization is not treated as a disconnected numerical exercise whose results live in a separate file or spreadsheet. The optimized twist distribution is written back into the same project state that later supports polar generation, structural loading, and geometry export. The aircraft definition therefore evolves coherently rather than being reassembled at each step.
+
+\section{Why Integration Matters More for Flying Wings}
+For conventional aircraft, some disciplinary decoupling is possible because the tail can absorb part of the trim and stability burden. Flying wings do not have that margin. A wing optimized only for induced drag may be difficult to trim. A structural layout optimized only for low mass may generate manufacturing or control-surface conflicts. A mission profile that appears feasible under simplified propulsion assumptions may fail once battery sag, thermal limits, or mass growth are included.
+
+The current software does not remove these tradeoffs, nor should it claim to. Its value is that it makes them visible earlier. The geometry service exposes target loading and twist synthesis. The structural service translates aerodynamic loading into mass, stress, and margin-oriented outputs. The mission service ties propulsion assumptions to energy use and performance summaries. The export service translates the same geometry into fabrication-oriented representations. This is the linked workflow the literature suggests is necessary for useful preliminary design.
+
+\section{Representative Design Loops Enabled by the Current Codebase}
+The implemented environment already supports several concrete design loops that are valuable in graduate research and early-stage development:
+\begin{itemize}
+\item A planform and twist loop, in which area, aspect ratio, taper, sweep, airfoil properties, and target loading are iterated to generate twist distributions and performance trends.
+\item An aerostructural loop, in which aerodynamic loading is used to estimate structural response and identify mass, stress, deflection, and feasibility implications of a geometric choice.
+\item A propulsion-mission loop, in which battery, motor, propeller, and mission-phase assumptions are varied to assess energy use, distance, endurance, and power demand.
+\item A geometry-to-manufacturing loop, in which the same aircraft definition is exported as ribs, spars, nested layouts, or CAD-style geometry for downstream fabrication or inspection.
+\end{itemize}
+
+These loops are preliminary by design. They do not eliminate the need for higher-fidelity analysis or physical test. Their value lies in reducing the cost of early iteration and in preserving consistency between engineering views of the same aircraft.
+
+\section{Research Contribution of the Software Artifact}
+The present artifact contributes to the field in a software-systems sense rather than through a single new physical theory. Its principal contribution is the construction of an integrated workflow tailored to flying-wing preliminary design. AeroSandbox provides much of the aerodynamic and optimization-oriented foundation, but the repository extends that foundation in several project-specific ways:
+\begin{itemize}
+\item a project schema that unifies geometry, mission, and analysis data;
+\item custom spanwise geometry construction for tailless and centerbody-inclusive aircraft layouts;
+\item a structural module tuned toward wingbox-based preliminary sizing with orthotropic material support;
+\item a propulsion and mission stack suitable for early performance reasoning;
+\item export logic that maps the internal aircraft representation into CAD and manufacturing formats.
+\end{itemize}
+
+In short, the thesis contribution is the integration itself: a design environment that keeps geometry, analysis, mission reasoning, and export within one consistent computational space.
+
+\chapter{Representative Case Study: IntendedValidation2}
+\section{Purpose of the Case Study}
+To move the thesis beyond an architectural description, this chapter summarizes a representative project case drawn from \texttt{IntendedValidation2.json}. The purpose of the case study is not to claim final validation of the software. Rather, it is to show how the integrated workflow behaves when a concrete aircraft definition is passed through the current analysis stack. In this thesis pass, the aerodynamic and structural outputs were regenerated with the repository's batch-analysis workflow, while the mission summary was taken from the mission results already stored in the same project file.
+
+This case is useful precisely because it is neither trivial nor uniformly successful. It produces plausible aerodynamic performance, a coherent twist distribution, and a lightweight structural solution, yet the structural feasibility flag remains false because of a local rib-crushing margin below unity. That is the right kind of result for a preliminary-design environment. The software should not merely produce favorable headline numbers; it should expose mixed outcomes and governing constraints.
+
+\section{Case Definition}
+The \texttt{IntendedValidation2} project represents a small flying-wing configuration with a blended centerbody, a single defined elevon surface, and a bell-shaped target lift distribution. Table \ref{tab:intendedvalidation2-geometry} summarizes the principal geometric and trim inputs relevant to the case-study discussion.
+
+\begin{table}[htbp]
+\centering
+\caption{Selected geometry and trim parameters for the \texttt{IntendedValidation2} case.}
+\label{tab:intendedvalidation2-geometry}
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Reference wing area & 1.25 m\(^2\) \\
+Reference aspect ratio & 5.10 \\
+Actual span including centerbody & 3.025 m \\
+Actual planform area & 1.625 m\(^2\) \\
+Actual aspect ratio & 5.63 \\
+Root chord & 0.707 m \\
+Tip chord & 0.283 m \\
+Mean aerodynamic chord & 0.525 m \\
+Leading-edge sweep & 20.0 deg \\
+Dihedral & 2.0 deg \\
+Gross takeoff weight & 12.0 kg \\
+Cruise altitude & 100 m \\
+Target lift distribution & Bell \\
+Static margin & 8.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The geometry is notable for two reasons. First, it uses body sections to extend the centerbody beyond a simple trapezoidal wing-only planform. Second, it includes a nonuniform rear spar position and a defined elevon surface, making it a suitable demonstration of the shared geometry-to-structure-to-export pipeline.
+
+\begin{figure}[htbp]
+\centering
+\maybegraphic{cad_isometric.png}
+\caption{Isometric geometry view of the case-study configuration.}
+\label{fig:case-cad-isometric}
+\end{figure}
+
+\section{Aerodynamic Performance Results}
+The batch analysis workflow computed cruise and takeoff metrics together with full polars over an angle-of-attack range from -5 deg to 15 deg. Table \ref{tab:intendedvalidation2-aero} summarizes the principal operating-point results.
+
+\begin{table}[htbp]
+\centering
+\caption{Computed aerodynamic operating-point results for \texttt{IntendedValidation2}.}
+\label{tab:intendedvalidation2-aero}
+\begin{tabular}{lll}
+\toprule
+\textbf{Quantity} & \textbf{Cruise} & \textbf{Takeoff} \\
+\midrule
+Velocity & 19.95 m/s & 13.34 m/s \\
+Angle of attack & 0.00 deg & 5.09 deg \\
+$C_L$ & 0.300 & 0.730 \\
+$C_D$ & 0.0129 & 0.0456 \\
+$L/D$ & 23.21 & 16.02 \\
+$C_m$ & $\approx 0$ & -0.0350 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At the cruise design point, the case reaches a lift-to-drag ratio of approximately 23.2 while maintaining the target design lift coefficient near 0.30. For a compact flying-wing configuration analyzed with a preliminary method stack, that is an encouraging result. The takeoff condition is predictably less efficient, with higher drag and a lower lift-to-drag ratio, but it also delivers the higher lift coefficient needed for low-speed operation.
+
+The batch polar sweep is valuable because it shows more than isolated operating points. It reveals how the configuration trends across angle of attack. Figure \ref{fig:intendedvalidation2-cl} shows the cruise and takeoff lift polars, while Figure \ref{fig:intendedvalidation2-cd} shows the corresponding drag trends.
+
+\begin{figure}[htbp]
+\centering
+\maybegraphic{intendedvalidation2_cl_polar.png}
+\caption{Computed cruise and takeoff lift polars for \texttt{IntendedValidation2}.}
+\label{fig:intendedvalidation2-cl}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\maybegraphic{intendedvalidation2_cd_polar.png}
+\caption{Computed cruise and takeoff drag polars for \texttt{IntendedValidation2}.}
+\label{fig:intendedvalidation2-cd}
+\end{figure}
+
+The aerodynamic outputs also produce a center-of-gravity location estimate of approximately 0.250 m in the model coordinate system. Because the twist and trim settings are embedded in the same project object, that estimate remains tied to the geometry and loading assumptions that produced the operating-point results.
+
+\section{Optimized Twist Distribution}
+The same case also illustrates the twist-synthesis capability of the software. The optimized twist distribution for the project ranges from approximately +3.29 deg at the inboard end of the section set to -1.48 deg at the outboard end. Figure \ref{fig:intendedvalidation2-twist} shows the monotonic shift from positive inboard twist to negative outboard washout.
+
+\begin{figure}[htbp]
+\centering
+\maybegraphic{intendedvalidation2_twist_distribution.png}
+\caption{Optimized twist distribution for \texttt{IntendedValidation2}.}
+\label{fig:intendedvalidation2-twist}
+\end{figure}
+
+This result matters because it demonstrates one of the most configuration-specific parts of the workflow. Flying wings rely heavily on twist as both a trim variable and a load-shaping variable. The software therefore benefits from treating twist not as an after-the-fact geometric detail, but as a first-class design output that can immediately inform aerodynamic, structural, and export steps.
+
+\section{Structural Results Under a 2.5g Load Case}
+The structural portion of the batch analysis was run at a 2.5g load factor, consistent with the default load case in the repository's full-analysis entry point. During the aerostructural solve, the VLM path produced an unstable result and the workflow automatically fell back to an AeroBuildup-based bell-distribution load estimate before continuing. That fallback is noteworthy because it shows that the codebase already contains a practical robustness mechanism rather than assuming ideal solver behavior in every case.
+
+Table \ref{tab:intendedvalidation2-struct} summarizes the principal structural outputs.
+
+\begin{table}[htbp]
+\centering
+\caption{Selected structural results for \texttt{IntendedValidation2} at 2.5g.}
+\label{tab:intendedvalidation2-struct}
+\begin{tabular}{ll}
+\toprule
+\textbf{Quantity} & \textbf{Value} \\
+\midrule
+Estimated structural mass & 2.363 kg \\
+Tip deflection & 2.27 mm \\
+Tip twist & 0.197 deg \\
+Maximum stress & 1.88 MPa \\
+Stress margin & 25.58 \\
+Minimum buckling margin & 2.21 \\
+Minimum rib crushing margin & 0.97 \\
+Overall structural feasibility flag & False \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+These results are informative because most global structural indicators are favorable. Tip deflection is very small relative to the span, tip twist is well below the maximum allowable twist, the maximum stress is low, and both the stress margin and minimum buckling margin are comfortably positive. Despite that, the overall structural feasibility flag remains false.
+
+The reason is local rather than global. The stored structural detail shows a minimum rib-crushing margin of approximately 0.97, slightly below the threshold of unity. In other words, the structure appears broadly efficient and stiff in the beam sense, but a local bearing or crushing limit still governs. From a thesis perspective, this is exactly the kind of insight a preliminary-design environment should provide: not merely whether a design ``passes,'' but which mechanism prevents an otherwise promising configuration from doing so.
+
+\section{Stored Mission Summary}
+The \texttt{IntendedValidation2} project file also contains a successful stored mission simulation result. That result is useful as a demonstration of the integrated mission-analysis capability, although it should be interpreted as a project-case example rather than as the centerpiece of the present rerun. Table \ref{tab:intendedvalidation2-mission} summarizes the top-level mission outputs retained in the project record.
+
+\begin{table}[htbp]
+\centering
+\caption{Stored mission summary associated with \texttt{IntendedValidation2}.}
+\label{tab:intendedvalidation2-mission}
+\begin{tabular}{ll}
+\toprule
+\textbf{Quantity} & \textbf{Value} \\
+\midrule
+Mission success flag & True \\
+Phases completed & 9 / 9 \\
+Total mission time & 82.1 s \\
+Total distance & 1283 m \\
+Total energy used & 6.64 Wh \\
+Final state of charge & 78.1\% \\
+Maximum altitude & 20.5 m \\
+Maximum speed & 19.94 m/s \\
+Maximum electrical power & 2.30 kW \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The mission result is modest in range and duration, but it serves the thesis well because it shows how propulsion assumptions, mission state, and aircraft geometry can coexist inside one project definition. Even in its present preliminary form, the software can carry a design from planform definition through aerodynamic and structural analysis into mission-level energy accounting.
+
+\section{Initial BARAM CFD Cross-Check}
+The repository now also contains a BARAM CFD case and ParaView state for the same geometry. This is valuable because it provides an initial independent flow-solver cross-check without requiring a separate geometry rebuild. The case bundle includes a solved flow directory, monitored force outputs, solver logs, and a ParaView state with slice, contour, reflection, and stream-tracer filters already configured around the aircraft surface and wake. The corresponding solver log reports convergence after 604 SIMPLE iterations.
+
+Several details of the stored BARAM setup matter for interpretation. The case uses an incompressible, pressure-based RANS solve with a standard \(k\)-\(\epsilon\) model. The computational domain applies a symmetry plane on one side of the aircraft, so the monitored forces correspond to a half-model and must be doubled to estimate full-aircraft loads. In addition, the BARAM force-coefficient monitor was configured with \(A_{\mathrm{ref}} = 1\), \(l_{\mathrm{ref}} = 1\), and \(U_{\infty} = 1\). The raw monitored \(C_L\), \(C_D\), and \(C_m\) values are therefore normalized with generic unit reference quantities rather than aircraft-specific thesis references.
+
+To produce a meaningful engineering comparison, the monitored forces were re-scaled using the project's actual planform area of 1.625 m\(^2\), the same air density used elsewhere in the project, and the cruise speed from the repository analysis workflow, 19.95 m/s. This step is an inference rather than a directly stored BARAM coefficient definition, but it is a defensible one because the BARAM case is configured at zero angle of attack and the repository cruise point also occurs at zero angle of attack. The final 20 monitored iterations were averaged after doubling the half-model forces.
+
+\begin{figure}[htbp]
+\centering
+\maybegraphic{baram_state_overview.png}
+\caption{BARAM and ParaView view of the CFD cross-check case.}
+\label{fig:baram-state-overview}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{Initial BARAM CFD cross-check against the repository cruise point for \texttt{IntendedValidation2}.}
+\label{tab:intendedvalidation2-baram-compare}
+\begin{tabular}{llll}
+\toprule
+\textbf{Quantity} & \textbf{BARAM CFD} & \textbf{Repository cruise} & \textbf{Difference} \\
+\midrule
+$C_L$ & 0.273 & 0.300 & -0.027 \\
+$C_D$ & 0.0341 & 0.0129 & +0.0212 \\
+$L/D$ & 8.00 & 23.21 & -15.21 \\
+Estimated lift & 108.0 N & 117.7 N required & -9.7 N \\
+Estimated drag & 13.51 N & 5.13 N implied & +8.38 N \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{BARAM drag decomposition for the final 20 monitored iterations, converted to a full-aircraft estimate.}
+\label{tab:intendedvalidation2-baram-drag-breakdown}
+\begin{tabular}{lll}
+\toprule
+\textbf{Component} & \textbf{Force} & \textbf{Share of total drag} \\
+\midrule
+Pressure drag & 10.43 N & 77.2\% \\
+Viscous drag & 3.08 N & 22.8\% \\
+Total drag & 13.51 N & 100.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure \ref{fig:intendedvalidation2-baram-conv} shows the re-scaled coefficient convergence history, while Figure \ref{fig:intendedvalidation2-baram-comp} summarizes the final comparison against the repository cruise point.
+
+\begin{figure}[htbp]
+\centering
+\maybegraphic{intendedvalidation2_baram_convergence.png}
+\caption{BARAM monitor history re-scaled to the \texttt{IntendedValidation2} cruise reference quantities.}
+\label{fig:intendedvalidation2-baram-conv}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\maybegraphic{intendedvalidation2_baram_vs_aerosandbox.png}
+\caption{Comparison of re-scaled BARAM cruise estimates with the repository cruise point.}
+\label{fig:intendedvalidation2-baram-comp}
+\end{figure}
+
+The comparison is encouraging in one respect and cautionary in another. After symmetry correction and cruise-speed normalization, the BARAM lift coefficient lies reasonably close to the repository cruise value. That suggests that the geometry, attitude, and loading assumptions are at least directionally aligned. The drag coefficient, however, is substantially larger in the BARAM result, driving the CFD-based \(L/D\) far below the low-order estimate.
+
+The force decomposition constrains the interpretation. The mismatch is not primarily explained by viscous drag alone. Table \ref{tab:intendedvalidation2-baram-drag-breakdown} shows that approximately 77\% of the CFD drag is pressure drag and only about 23\% is viscous drag. In fact, the CFD pressure-drag contribution by itself already exceeds the entire low-order cruise drag implied by the repository result. The discrepancy is therefore pressure- or form-drag dominated rather than skin-friction dominated. The most defensible conclusion is accordingly a narrow one: the present low-order workflow is under-capturing one or more pressure-drag mechanisms that the RANS case resolves. Plausible contributors include blended-centerbody form drag, interference effects, or localized separation, but identifying the dominant mechanism requires a dedicated follow-on study rather than assertion.
+
+This result does not invalidate the repository workflow, but it does show that drag prediction and reference-condition matching require closer study before any strong accuracy claim can be made. In thesis terms, the comparison is best interpreted as an initial validation pathway and an illustration of the integrated workflow's usefulness: the discrepancy is visible, quantifiable, and traceable from a saved project directly to an external CFD case.
+
+\section{Interpretation of the Case Study}
+Taken together, the case-study results support the main argument of the thesis. The software does not simply generate geometry or isolated performance coefficients. It exposes coupled design consequences. The \texttt{IntendedValidation2} configuration appears aerodynamically attractive in the low-order workflow, with a strong cruise lift-to-drag ratio and a coherent washout distribution. The structural response is globally stiff and lightweight, but local rib crushing still prevents full structural feasibility. The stored mission result shows that the same configuration can also be examined from an energy-use standpoint without leaving the project framework. The added BARAM case extends the argument further by showing that an external CFD comparison can be tied to the same design definition and used to identify where the workflow already agrees well with higher-fidelity analysis and where it does not.
+
+This is an instructive outcome for a thesis built around software integration. A less connected tool chain might produce a favorable aerodynamic answer and stop there. The present environment carries the design far enough to show that one local structural detail remains limiting and that an independent CFD path produces a materially different drag prediction that now requires explanation. That is precisely the sort of workflow advantage argued for in the literature review, and it is visible here in a concrete project case.
+
+\chapter{Validation Strategy, Limitations, and Discussion}
+\section{What the Current Repository Demonstrates}
+The current repository demonstrates that the software can already operate as a unified preliminary-design environment. This claim is supported by the code structure, the available entry points, the observed data flow, and compile-tested documentation. The system accepts a project definition, builds geometry, computes aerodynamic metrics, generates polars, runs structural analysis, supports mission-oriented simulation, and exports geometry products from the same underlying aircraft representation.
+
+This is a meaningful result because the literature review shows that fragmentation is one of the main obstacles in conceptual aircraft workflows. The present codebase addresses that obstacle directly. Even before a larger validation campaign is complete, the repository establishes that an integrated software architecture for flying-wing preliminary design is both feasible and practically usable.
+
+\section{What Still Requires Formal Validation}
+What the current repository does \emph{not} yet demonstrate is comprehensive predictive accuracy across all operating regimes or aircraft classes. Low-order aerodynamic methods remain sensitive to assumptions, especially for separated flow, post-stall behavior, and low-aspect-ratio configurations \cite{Yu2022ICAS,RosasCordova2024VSPAERO}. Structural preliminary-sizing methods are useful for early trade studies, but they do not replace detailed finite element modeling, detailed joint analysis, or physical load testing. Mission simulation results are only as credible as the aerodynamic and propulsion models that feed them.
+
+The next validation layer should therefore be organized around representative case studies. Those studies should compare the tool's outputs against reference configurations, independent solvers, published data, or physical test results wherever practical. The batch-oriented project workflow already provides a useful foundation for that effort because it makes repeated, file-based studies straightforward to organize. The BARAM case introduced in Chapter 5 is valuable in this regard, but it should still be treated as an initial cross-check rather than a final validation benchmark because the monitor normalization had to be reconstructed from saved case metadata and repository cruise conditions.
+
+\subsection{BARAM Mesh-Sensitivity Verification}
+One additional verification step is especially important before the BARAM results are used to support any stronger aerodynamic claim: mesh sensitivity. The current BARAM case is already useful as an initial cross-check because it exposes a large, pressure-dominated drag discrepancy relative to the low-order cruise workflow. However, monitor convergence by itself is not sufficient to establish that the computed drag level is numerically insensitive to discretization. If the drag changes materially with mesh density, near-wall resolution, or related discretization choices, then part of the discrepancy may still be numerical rather than physical.
+
+For that reason, a four-level mesh-sensitivity study was completed for the \texttt{IntendedValidation2} BARAM path at both the repository cruise condition and the takeoff-angle-of-attack condition. The study repeated the same geometry, solver family, domain treatment, and monitoring workflow on systematically refined meshes. Because the original ``fine'' mesh was only modestly larger than the medium mesh, it is relabeled here as \emph{Medium 2}; the final refinement level, previously tracked as ``extra fine,'' is reported as \emph{Fine}. Table \ref{tab:intendedvalidation2-grid-independence} summarizes the resulting cell counts and converged monitor-derived coefficients. A 1\% coefficient-change band is retained only as an informal screening reference, not as a formal grid-independence criterion.
+
+\begin{table}[htbp]
+\centering
+\caption{Matched BARAM mesh-sensitivity results for \texttt{IntendedValidation2}, with the former fine level relabeled as Medium 2 and the former extra-fine level reported as Fine.}
+\label{tab:intendedvalidation2-grid-independence}
+\begin{tabular}{llllll}
+\toprule
+\textbf{Condition} & \textbf{Mesh} & \textbf{Cells} & \textbf{$C_D$} & \textbf{$C_L$} & \textbf{$L/D$} \\
+\midrule
+Cruise & Coarse & 422,082 & 0.0280 & 0.2854 & 10.19 \\
+Cruise & Medium & 2,158,783 & 0.0274 & 0.2877 & 10.50 \\
+Cruise & Medium 2 & 2,772,883 & 0.0274 & 0.2904 & 10.60 \\
+Cruise & Fine & 8,505,080 & 0.0268 & 0.2921 & 10.88 \\
+Takeoff & Coarse & 422,082 & 0.0111 & 0.1660 & 14.99 \\
+Takeoff & Medium & 2,158,783 & 0.0107 & 0.1692 & 15.80 \\
+Takeoff & Medium 2 & 2,772,883 & 0.0105 & 0.1722 & 16.42 \\
+Takeoff & Fine & 33,900,695 & 0.0108 & 0.1712 & 15.83 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The cruise case is better described as reasonably stable in lift but still somewhat sensitive in drag. From Medium to Medium 2, the changes are very small, approximately 0.02\% in \(C_D\) and 0.93\% in \(C_L\). From Medium 2 to Fine, the lift change remains modest at about 0.57\%, but the drag coefficient still shifts by about 2.02\%. That pattern supports the conclusion that the cruise discrepancy identified in Chapter 5 is not simply a coarse-mesh artifact, while also avoiding an overstatement that the present cruise result is fully grid independent in the strict sense.
+
+The takeoff case remains more sensitive than cruise. From Medium to Medium 2, the changes are approximately 2.02\% in \(C_D\) and 1.78\% in \(C_L\). From Medium 2 to Fine, the lift change tightens to about 0.58\%, but the drag coefficient still changes by about 3.13\%. The takeoff-angle-of-attack solution is therefore best described as a useful mesh-sensitivity result rather than a numerically settled drag prediction.
+
+One limitation remains important. Although the refinement ladder itself was completed, the snappyHexMesh layer-addition stage did not retain nonzero wall-layer cells on the final accepted meshes. The current study therefore establishes coefficient-sensitivity trends for the present meshing and monitoring setup, but it does not by itself establish boundary-layer independence. Accordingly, the cruise result can support the broader drag-discrepancy argument already made in this thesis, whereas stronger claims about absolute viscous-drag fidelity or wall-resolution adequacy should remain qualified until retained prism layers or an equivalent near-wall verification path are demonstrated.
+
+\subsection{Validated Interpretation of the Drag Discrepancy}
+The BARAM cross-check in Chapter 5 established two robust facts. First, the low-order cruise workflow predicts substantially less drag than the converged RANS case. Second, the discrepancy is pressure-drag dominated rather than viscous-drag dominated. Taken together, these facts already rule out a purely skin-friction explanation. The remaining question is therefore narrower: where does the excess pressure drag originate on the aircraft?
+
+To localize that drag without changing the underlying project definition, the repository's own geometry-export stack was used to partition the half-model outer mold line into three CFD surface groups: \texttt{centerbody}, \texttt{junction}, and \texttt{outer\_wing}. A split-patch continuation case was then built from the same geometry, initialized from the converged baseline flow field, and postprocessed with per-patch force monitors. For this attribution study, the patch forces are interpreted in normalized share form rather than as final thesis-level absolute coefficients. The converged unsplit BARAM case remains the authoritative source for the absolute drag coefficient; the split-patch case is used to determine where that drag is being generated.
+
+\begin{table}[htbp]
+\centering
+\caption{Comparison of projected planform share and split-patch CFD drag share for \texttt{IntendedValidation2}.}
+\label{tab:intendedvalidation2-drag-attribution}
+\begin{tabular}{lllll}
+\toprule
+\textbf{Region} & \textbf{Planform share} & \textbf{Drag share} & \textbf{Pressure-drag share} & \textbf{Drag/area ratio} \\
+\midrule
+Centerbody & 23.0\% & 92.3\% & 92.3\% & 4.01 \\
+Junction & 9.2\% & 1.9\% & 1.9\% & 0.21 \\
+Outer wing & 67.8\% & 5.7\% & 5.8\% & 0.08 \\
+\midrule
+Centerbody + junction & 32.2\% & 94.3\% & 94.2\% & 2.93 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\maybegraphic{intendedvalidation2_drag_area_attribution.png}
+\caption{Planform-area share versus split-patch drag share for \texttt{IntendedValidation2}.}
+\label{fig:intendedvalidation2-drag-attribution}
+\end{figure}
+
+Table \ref{tab:intendedvalidation2-drag-attribution} makes the central result difficult to dismiss as a minor numerical artifact. The body-dominated region occupies only about 32\% of the projected planform area, yet it carries roughly 94\% of the drag magnitude in the stabilized split-patch continuation. The centerbody alone occupies about 23\% of the planform but carries more than 92\% of the drag magnitude. By contrast, the outer wing contributes nearly 68\% of the planform area but only about 6\% of the drag magnitude in the same attribution study. In other words, the discrepancy is not centered in the outer lifting surface. It is concentrated overwhelmingly in the blended central body region.
+
+That result explains why the CFD and low-order predictions can remain relatively close in lift while diverging sharply in drag. In the present implementation, the low-order cruise analysis constructs a single symmetric AeroSandbox wing from spanwise sections and evaluates it with AeroBuildup. This is an efficient preliminary-design representation, but it does not introduce a distinct body-volume element or a dedicated wing-body interference model at the cruise-analysis stage. Similarly, when VLM fails during aerostructural analysis, the code retains total lift from AeroBuildup and then imposes an analytic bell or elliptical spanwise load shape rather than resolving a body-specific pressure field. These are reasonable approximations for rapid design iteration, but they also mean that the blended centerbody is treated primarily as part of a lifting-surface definition rather than as a volumetric source of pressure drag.
+
+The scale of the \texttt{IntendedValidation2} case makes that omission more important, not less. At the repository cruise speed of 19.95 m/s, the root-chord Reynolds number is approximately \(1.02 \times 10^6\), the tip-chord Reynolds number is approximately \(3.86 \times 10^5\), and the mean aerodynamic chord Reynolds number is approximately \(7.92 \times 10^5\). That is precisely the regime where a thick blended centerbody, short body-to-wing transition, and locally adverse pressure recovery can produce large configuration-specific pressure drag even if the overall lift coefficient remains close to the low-order estimate. This is consistent with the observed pattern: the CFD lift coefficient remains within about 0.03 of the repository cruise value, but the drag coefficient is much larger.
+
+The validation result can therefore be stated more precisely than before. For small blended flying-wing configurations of the type represented by \texttt{IntendedValidation2}, the major source of the present drag discrepancy is neither outer-wing viscous drag nor a generic failure of the entire low-order workflow. It is the under-representation of centerbody-dominated pressure drag in a wing-only preliminary aerodynamic model. This is a stronger and more useful conclusion than simply saying that ``AeroBuildup is limited,'' because it identifies both the geometric regime in which the discrepancy appears and the part of the configuration that must be modeled more faithfully in future work.
+
+\subsection{Why a DATCOM-Like Buildup Method Is Weak for This Configuration}
+It is useful to state explicitly what kind of limitation is being observed here. The issue is not that a DATCOM-like aerodynamic buildup method is universally unreliable. Such methods are often very effective in preliminary design when the dominant behavior can be represented as the superposition of attached-flow lifting-surface trends, induced-drag relations, and moderate empirical corrections. The present case becomes difficult because the configuration combines three features that push beyond that sweet spot: a thick blended centerbody, a short transition between body and lifting surface, and a Reynolds-number range where pressure recovery is sensitive to local geometry.
+
+The repository's cruise path makes that distinction concrete. In the current implementation, the aircraft passed to the cruise solver is built as a single symmetric \texttt{asb.Wing} assembled from spanwise sections and then wrapped in an \texttt{asb.Airplane} that contains that wing alone. This is efficient and appropriate for rapid conceptual iteration, but it means that the central body is represented primarily through changes in local section geometry, chord, and planform rather than as a separate three-dimensional body whose bluffness, shoulder curvature, aft taper, and local crossflow can generate their own pressure-drag mechanisms. In other words, the low-order model sees a continuous lifting surface, whereas the CFD solver sees a lifting surface embedded in a volumetric flow field.
+
+That difference matters most for drag, not lift. A section-based buildup can still recover a reasonable global lift coefficient because the integrated circulation level is driven mainly by planform, twist, angle of attack, and operating point. This is consistent with the observed results: the CFD and low-order cruise lift coefficients are relatively close. Drag, however, is much more sensitive to whether the method resolves how the flow accelerates around the centerbody shoulder, how the pressure recovers over the aft body blend, whether the body-to-wing transition creates interference losses, and whether weak local separation develops in those regions. Those are strongly three-dimensional pressure-field effects. They are precisely the kind of mechanism that a DATCOM-like buildup method does not resolve directly.
+
+The stabilized split-patch attribution supports that interpretation. If the discrepancy were mainly due to induced-drag tuning or to generic skin-friction error on the wing, the outer wing would be expected to carry a large share of the missing drag. It does not. Instead, the centerbody dominates the drag budget despite occupying a minority of the projected planform area. That pattern is much more consistent with under-resolved body and interference pressure drag than with a simple error in outer-wing lift distribution.
+
+The aerostructural fallback logic reinforces the same point. When VLM fails in the structural workflow, the implementation keeps total lift from AeroBuildup and then applies a prescribed bell or elliptical spanwise distribution. That is a practical and defensible fallback for structural loading studies, but it replaces local flow physics with an imposed load shape. For structure this may be acceptable at the preliminary stage; for drag attribution it is not. The pressure-drag discrepancy uncovered by the CFD comparison therefore reflects a real modeling boundary in the current low-order stack: the workflow preserves overall loading trends better than it captures centerbody-specific drag mechanisms.
+
+For the thesis, this distinction matters because it avoids overstatement in both directions. It would be inaccurate to claim that the low-order method is simply ``wrong.'' It would also be inaccurate to claim that the discrepancy is an unexplained CFD artifact. The more defensible statement is narrower: for small blended flying wings with substantial centerbody volume, a DATCOM-like wing-oriented buildup remains useful for rapid lift and trim estimation, but it is not sufficient by itself for high-confidence drag prediction because the dominant missing terms are three-dimensional body and interference pressure-drag effects.
+
+\section{Accuracy Boundaries and Solver Assumptions}
+The literature reviewed earlier makes clear that early-stage aircraft software must be judged not only by whether it runs, but also by where its results are trustworthy. The current tool inherits both the strengths and the boundaries of its numerical backends. AeroSandbox-based methods support rapid iteration and optimization-oriented workflows, but their interpretation still depends on the regime and the model used \cite{Sharpe2021AeroSandbox,Sharpe2024Graph}. NeuralFoil-based airfoil sweeps provide speed and coverage, but they remain part of a preliminary-design stack rather than a replacement for higher-fidelity validation \cite{Sharpe2025NeuralFoil}. Potential-flow comparisons in the literature further reinforce the need for caution when low-order methods are extended into aggressive regimes \cite{Yu2022ICAS}.
+
+The structural subsystem likewise operates at the preliminary-design level. Its role is to expose trends, margins, and dominant constraints early enough to influence geometry decisions. That is exactly the role it should play in a thesis of this type. The appropriate claim is therefore that the structural module improves the quality of early decisions, not that it solves the detailed-structure problem by itself.
+
+\section{Relevance to Graduate Research and Design Practice}
+The software described in this thesis is especially relevant to graduate research because it creates a practical platform for iterative study. A student or researcher can define a concept once, run multiple analyses, refine assumptions, and keep the design traceable across iterations. That is valuable in thesis work because the artifact becomes both a design tool and a research object. The same software can support literature-informed methodology, exploratory trade studies, and later validation.
+
+The package is also relevant to small-team design practice. Early-stage UAV development often faces the same constraints that motivated this project: limited resources, the need for rapid iteration, and a desire to avoid manually rebuilding the aircraft model every time a design decision changes. The codebase already points toward that use case by combining GUI accessibility with scriptable analysis entry points and export pathways.
+
+\section{Discussion of Scope Discipline}
+One of the recurring risks in software theses is allowing the document to drift into a proposal for everything the project \emph{might} become. This draft deliberately resists that tendency. The manuscript claims only what is presently visible in the repository and broadly supported by the code. That discipline matters because it preserves the credibility of the eventual final thesis. A narrower, defensible claim is preferable to a broad but weakly supported one.
+
+\chapter{Conclusion and Future Work}
+\section{Conclusion}
+This thesis documents the Flying Wing Tool as an integrated preliminary-design environment for tailless aircraft. The current codebase already contains a substantial and coherent software foundation: parametric geometry definition, spanwise section generation, twist-distribution synthesis, AeroSandbox-based aerodynamic analysis, orthotropic wingbox structural assessment, mission and propulsion modeling, and direct export to CAD and manufacturing-oriented formats. The central accomplishment of the work is the integration of these capabilities around one shared project model.
+
+That integration addresses an important practical gap in early-stage flying-wing design. Instead of separating geometry, performance reasoning, structural checks, and export into disconnected workflows, the software keeps them linked. For a configuration as tightly coupled as a flying wing, that is a meaningful contribution. The artifact does not eliminate the need for higher-fidelity analysis or experimental validation, but it improves the speed, traceability, and technical quality of early design iteration.
+
+\section{Future Work}
+Subsequent thesis work should deepen the artifact rather than merely broaden it. Several natural extensions follow directly from the present repository state:
+\begin{enumerate}[label=\arabic*.]
+\item Build formal validation studies against published cases, independent solver outputs, or experimental data for representative flying-wing configurations.
+\item Document complete end-to-end design studies using saved project files so that the workflow can be defended as a reproducible engineering method rather than only a software architecture.
+\item Strengthen optimization studies around geometry, twist, and mission objectives while preserving the current discipline of only claiming validated present-day capability.
+\item Expand solver verification and data-contract checking across services so that units, assumptions, and handoff conventions remain explicit as the codebase grows.
+\item Mature advanced dynamic and interoperability paths where needed, especially where external simulation environments or richer closed-loop studies are desired.
+\end{enumerate}
+
+These next steps are appropriate because the repository already contains the integrated backbone required to support them. In other words, the present stage of the project has crossed an important threshold: the main question is no longer whether a unified flying-wing preliminary design environment can be built, but how far it can be validated, hardened, and extended.
+
+\clearpage
+\input{../LitReview/src/references.tex}
+
+\appendix
+\chapter{Repository-Derived Scope of the Draft}
+This manuscript was expanded from repository-local artifacts and code inspection rather than from speculative future plans. The main body therefore prioritizes implemented geometry, aerodynamic, structural, mission, propulsion, and export workflows. Less mature features are not presented as present-tense thesis deliverables unless they are clearly visible and defensibly bounded in the current code.
+
+\chapter{Primary Repository Modules Referenced in This Draft}
+\begingroup
+\small
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{p{0.28\linewidth} p{0.62\linewidth}}
+\toprule
+\textbf{File or Module} & \textbf{Role in the thesis draft} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File or Module} & \textbf{Role in the thesis draft} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{core/state.py} & Defines the main project schema linking wing, mission, and analysis data and supporting serialization. \\
+\texttt{core/models/planform.py} & Defines the parametric planform, control-surface, and body-section representation used throughout the workflow. \\
+\texttt{core/models/twist\_trim.py} & Stores trim and loading-target parameters used for design velocity and twist-distribution logic. \\
+\texttt{services/geometry.py} & Implements spanwise section generation, wing construction, aerodynamic analysis entry points, performance metrics, polars, and aerostructural coupling hooks. \\
+\texttt{services/aero\_analysis.py} & Provides airfoil loading and NeuralFoil-based sweep capability for section-level studies. \\
+\texttt{services/optimization.py} & Connects twist optimization back into the shared project state. \\
+\texttt{services/structure.py} & Implements the wingbox beam, buckling, stringer, and mass-estimation logic used for structural preliminary sizing. \\
+\texttt{services/mission/mission\_simulator.py} & Implements mission-phase simulation, result aggregation, and output summaries. \\
+\texttt{services/propulsion/propulsion\_system.py} & Couples battery, ESC, motor, propeller, and thermal models into a propulsion analysis chain. \\
+\texttt{services/export/geometry\_builder.py} & Builds geometry products used by export and CAD-style workflows. \\
+\texttt{services/export/dxf\_export.py} & Supports manufacturing-oriented export of ribs, spars, and nested layouts. \\
+\texttt{services/step\_export.py} & Supports direct STEP generation from project state. \\
+\texttt{app/main\_window.py} & Defines the top-level GUI shell and ties together the major user-facing tabs. \\
+\texttt{app/tabs/geometry.py} & Exposes planform, control-surface, and geometry editing workflows to the user. \\
+\texttt{app/tabs/analysis.py} & Exposes airfoil sweep and exploratory aerodynamic studies. \\
+\texttt{app/tabs/mission.py} & Exposes mission and propulsion configuration and simulation workflows. \\
+\texttt{app/tabs/structure.py} & Exposes structural materials, sizing controls, and structural analysis execution. \\
+\texttt{app/tabs/export.py} & Exposes CAD, DXF, and interoperability-oriented export workflows. \\
+\texttt{run\_app.py} & Main GUI entry point. \\
+\texttt{run\_full\_analysis.py} & Batch-style analysis entry point useful for reproducible file-based studies. \\
+\end{longtable}
+\endgroup
+
+\end{document}
