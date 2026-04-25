@@ -70,6 +70,9 @@ class AnalysisResults:
 
     # Mission simulation results (summary + per-phase stats)
     mission_results: Dict[str, Any] = field(default_factory=dict)
+
+    # Per-tab GUI settings that do not belong in the aerodynamic/structural data.
+    gui_settings: Dict[str, Any] = field(default_factory=dict)
     
     def as_dict(self) -> dict:
         return {
@@ -79,6 +82,7 @@ class AnalysisResults:
             "performance_metrics": self.performance_metrics,
             "structural_analysis": self.structural_analysis,
             "mission_results": self.mission_results,
+            "gui_settings": self.gui_settings,
         }
 
     @classmethod
@@ -90,6 +94,7 @@ class AnalysisResults:
             performance_metrics=data.get("performance_metrics", {}),
             structural_analysis=data.get("structural_analysis", {}),
             mission_results=data.get("mission_results", {}),
+            gui_settings=data.get("gui_settings", {}),
         )
 
 @dataclass
@@ -127,32 +132,20 @@ class Project:
         wing_data = data.get("wing", {})
         
         # 1. Planform
+        from core.models.planform import PlanformGeometry, BodySection, ControlSurface
+
         pf_data = wing_data.get("planform", {})
         pf_kwargs = {}
         
-        # Valid scalar fields for PlanformGeometry
         valid_pf_fields = {
-            "wing_area_m2", "aspect_ratio", "taper_ratio", "sweep_le_deg", "dihedral_deg",
-            "elevon_root_span_percent", "elevon_root_chord_percent", "elevon_tip_chord_percent",
-            "front_spar_root_percent", "front_spar_tip_percent", "rear_spar_root_percent",
-            "rear_spar_span_percent", "center_chord_extension_percent", "center_section_span_percent",
-            "center_extension_linear", "snap_to_sections", "bwb_blend_span_percent", "bwb_dihedral_deg",
-            "spar_material_name", "skin_material_name", "rib_material_name", "rib_count",
-            "spar_thickness_mm", "skin_thickness_mm", "rib_thickness_mm",
-            "rib_lightening_fraction", "lightening_hole_margin_mm", "lightening_hole_shape",
-            "factor_of_safety", "max_tip_deflection_percent", "max_tip_twist_deg",
-            "spar_grain_spanwise", "skin_grain_spanwise", "stringer_count",
-            "stringer_height_mm", "stringer_thickness_mm", "stringer_material_name",
-            "skin_boundary_condition", "include_curvature_effect", "post_buckling_enabled"
-        }
+            f.name for f in dataclasses.fields(PlanformGeometry) if f.init
+        } - {"body_sections", "control_surfaces"}
         for k, v in pf_data.items():
             if k in valid_pf_fields:
                 if k in ("center_extension_linear", "snap_to_sections"):
                     pf_kwargs[k] = bool(v)
                 else:
                     pf_kwargs[k] = v
-        
-        from core.models.planform import PlanformGeometry, BodySection, ControlSurface
         
         # Handle body_sections (new in v1, defaults to empty)
         body_sections_data = pf_data.get("body_sections", [])

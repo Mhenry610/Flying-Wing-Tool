@@ -1260,6 +1260,67 @@ class StructureTab(QWidget):
         
         ax.view_init(elev=25, azim=-60)
     
+    def sync_to_project(self):
+        """Push all editable controls into project state before saving."""
+        if self.project is None or not hasattr(self.project.wing, "planform"):
+            return
+        planform = self.project.wing.planform
+        planform.spar_material_name = self.spar_material_combo.currentText()
+        planform.skin_material_name = self.skin_material_combo.currentText()
+        planform.rib_material_name = self.rib_material_combo.currentText()
+        planform.stringer_material_name = self.stringer_material_combo.currentText()
+        self._on_geometry_changed()
+        settings = getattr(self.project.analysis, "gui_settings", None)
+        if settings is None:
+            self.project.analysis.gui_settings = {}
+            settings = self.project.analysis.gui_settings
+        settings["structure_tab"] = self._collect_gui_settings()
+
+    def _collect_gui_settings(self) -> Dict[str, Any]:
+        return {
+            "advanced_visible": bool(self.advanced_chk.isChecked()),
+            "flight_condition": self.flight_condition_combo.currentData(),
+            "load_factor": float(self.load_factor_spin.value()),
+            "exaggerate_deformation": bool(self.exaggerate_chk.isChecked()),
+            "exaggeration_factor": float(self.exaggeration_factor_spin.value()),
+            "user_mat_E1_GPa": float(self.user_mat_E1.value()),
+            "user_mat_E2_GPa": float(self.user_mat_E2.value()),
+            "user_mat_G12_GPa": float(self.user_mat_G12.value()),
+            "user_mat_density_kg_m3": float(self.user_mat_density.value()),
+            "user_mat_sigma_c_MPa": float(self.user_mat_sigma_c.value()),
+            "user_mat_sigma_t_MPa": float(self.user_mat_sigma_t.value()),
+        }
+
+    def _apply_gui_settings(self, settings: Dict[str, Any]) -> None:
+        def _set_spin(spin: Any, value: Any) -> None:
+            if value is None:
+                return
+            try:
+                spin.setValue(float(value))
+            except Exception:
+                return
+
+        if settings.get("advanced_visible") is not None:
+            self.advanced_chk.setChecked(bool(settings.get("advanced_visible")))
+
+        condition = settings.get("flight_condition")
+        if condition is not None:
+            idx = self.flight_condition_combo.findData(condition)
+            if idx >= 0:
+                self.flight_condition_combo.setCurrentIndex(idx)
+
+        _set_spin(self.load_factor_spin, settings.get("load_factor"))
+        if settings.get("exaggerate_deformation") is not None:
+            self.exaggerate_chk.setChecked(bool(settings.get("exaggerate_deformation")))
+            self.exaggeration_factor_spin.setEnabled(self.exaggerate_chk.isChecked())
+        _set_spin(self.exaggeration_factor_spin, settings.get("exaggeration_factor"))
+        _set_spin(self.user_mat_E1, settings.get("user_mat_E1_GPa"))
+        _set_spin(self.user_mat_E2, settings.get("user_mat_E2_GPa"))
+        _set_spin(self.user_mat_G12, settings.get("user_mat_G12_GPa"))
+        _set_spin(self.user_mat_density, settings.get("user_mat_density_kg_m3"))
+        _set_spin(self.user_mat_sigma_c, settings.get("user_mat_sigma_c_MPa"))
+        _set_spin(self.user_mat_sigma_t, settings.get("user_mat_sigma_t_MPa"))
+
     def update_from_project(self):
         """Update UI from project state."""
         if not hasattr(self.project.wing, 'planform'):
@@ -1280,6 +1341,7 @@ class StructureTab(QWidget):
         self.hole_shape_combo.blockSignals(True)
         self.fos_spin.blockSignals(True)
         self.max_deflection_spin.blockSignals(True)
+        self.max_twist_spin.blockSignals(True)
         # Stringer geometry (now in Geometry group)
         self.stringer_count_spin.blockSignals(True)
         self.stringer_height_spin.blockSignals(True)
@@ -1288,6 +1350,9 @@ class StructureTab(QWidget):
         self.boundary_condition_combo.blockSignals(True)
         self.include_curvature_chk.blockSignals(True)
         self.post_buckling_chk.blockSignals(True)
+        self.stringer_section_combo.blockSignals(True)
+        self.spar_cap_width_spin.blockSignals(True)
+        self.fastener_fraction_spin.blockSignals(True)
         
         try:
             # Update material combos
@@ -1321,11 +1386,21 @@ class StructureTab(QWidget):
                 
             self.fos_spin.setValue(planform.factor_of_safety)
             self.max_deflection_spin.setValue(planform.max_tip_deflection_percent)
+            self.max_twist_spin.setValue(getattr(planform, 'max_tip_twist_deg', 3.0))
             
             # Update advanced buckling options
             self.stringer_count_spin.setValue(getattr(planform, 'stringer_count', 0))
             self.stringer_height_spin.setValue(getattr(planform, 'stringer_height_mm', 10.0))
             self.stringer_thickness_spin.setValue(getattr(planform, 'stringer_thickness_mm', 1.5))
+            idx = self.stringer_section_combo.findText(
+                getattr(planform, 'stringer_section_type', 'rectangular')
+            )
+            if idx >= 0:
+                self.stringer_section_combo.setCurrentIndex(idx)
+            self.spar_cap_width_spin.setValue(getattr(planform, 'spar_cap_width_mm', 10.0))
+            self.fastener_fraction_spin.setValue(
+                getattr(planform, 'fastener_adhesive_fraction', 0.10)
+            )
             
             # Map internal key to display text for boundary condition
             bc_key = getattr(planform, 'skin_boundary_condition', 'semi_restrained')
@@ -1347,6 +1422,30 @@ class StructureTab(QWidget):
             self.post_buckling_chk.setChecked(
                 getattr(planform, 'post_buckling_enabled', False)
             )
+
+            saved_condition = (
+                self.project.analysis.structural_analysis.get("flight_condition", {}).get("condition_name")
+                if self.project.analysis.structural_analysis
+                else None
+            )
+            if saved_condition:
+                combo_index = self.flight_condition_combo.findData(
+                    str(saved_condition).strip().lower()
+                )
+                if combo_index >= 0:
+                    self.flight_condition_combo.setCurrentIndex(combo_index)
+
+            saved_load_factor = (
+                self.project.analysis.structural_analysis.get("flight_condition", {}).get("load_factor")
+                if self.project.analysis.structural_analysis
+                else None
+            )
+            if saved_load_factor is not None:
+                self.load_factor_spin.setValue(float(saved_load_factor))
+
+            settings = getattr(self.project.analysis, "gui_settings", {}).get("structure_tab", {})
+            if settings:
+                self._apply_gui_settings(settings)
             
         finally:
             # Re-enable signals
@@ -1362,6 +1461,7 @@ class StructureTab(QWidget):
             self.hole_shape_combo.blockSignals(False)
             self.fos_spin.blockSignals(False)
             self.max_deflection_spin.blockSignals(False)
+            self.max_twist_spin.blockSignals(False)
             # Stringer geometry (now in Geometry group)
             self.stringer_count_spin.blockSignals(False)
             self.stringer_height_spin.blockSignals(False)
@@ -1370,6 +1470,16 @@ class StructureTab(QWidget):
             self.boundary_condition_combo.blockSignals(False)
             self.include_curvature_chk.blockSignals(False)
             self.post_buckling_chk.blockSignals(False)
+            self.stringer_section_combo.blockSignals(False)
+            self.spar_cap_width_spin.blockSignals(False)
+            self.fastener_fraction_spin.blockSignals(False)
+
+        if self.project.analysis.structural_analysis:
+            self.analysis_result = self.project.analysis.structural_analysis
+            if 'structure' in self.analysis_result:
+                self._update_summary(self.analysis_result)
+                self._update_plots(self.analysis_result)
+                self.export_report_btn.setEnabled(True)
     
     def _run_optimization(self):
         """Run thickness optimization to minimize mass."""
@@ -2177,65 +2287,3 @@ class StructureTab(QWidget):
         
         fig.tight_layout(rect=[0, 0, 1, 0.96])
         return fig
-
-    def update_from_project(self):
-        """Update tab from project state after loading."""
-        # Update material combos
-        planform = self.project.wing.planform
-        
-        idx = self.spar_material_combo.findText(planform.spar_material_name)
-        if idx >= 0:
-            self.spar_material_combo.setCurrentIndex(idx)
-        
-        idx = self.skin_material_combo.findText(planform.skin_material_name)
-        if idx >= 0:
-            self.skin_material_combo.setCurrentIndex(idx)
-        
-        idx = self.rib_material_combo.findText(getattr(planform, 'rib_material_name', planform.skin_material_name))
-        if idx >= 0:
-            self.rib_material_combo.setCurrentIndex(idx)
-        
-        idx = self.stringer_material_combo.findText(getattr(planform, 'stringer_material_name', planform.skin_material_name))
-        if idx >= 0:
-            self.stringer_material_combo.setCurrentIndex(idx)
-        
-        # Update geometry spinboxes
-        self.spar_thickness_spin.setValue(planform.spar_thickness_mm)
-        self.skin_thickness_spin.setValue(planform.skin_thickness_mm)
-        self.rib_thickness_spin.setValue(planform.rib_thickness_mm)
-        self.fos_spin.setValue(planform.factor_of_safety)
-        self.max_deflection_spin.setValue(planform.max_tip_deflection_percent)
-        self.max_twist_spin.setValue(getattr(planform, 'max_tip_twist_deg', 3.0))
-        
-        # Update stringer settings
-        self.stringer_count_spin.setValue(getattr(planform, 'stringer_count', 0))
-        self.stringer_height_spin.setValue(getattr(planform, 'stringer_height_mm', 10.0))
-        self.stringer_thickness_spin.setValue(getattr(planform, 'stringer_thickness_mm', 1.5))
-
-        saved_condition = (
-            self.project.analysis.structural_analysis.get("flight_condition", {}).get("condition_name")
-            if self.project.analysis.structural_analysis
-            else None
-        )
-        saved_condition = str(saved_condition).strip().lower()
-        combo_index = self.flight_condition_combo.findData(saved_condition)
-        if combo_index < 0:
-            combo_index = self.flight_condition_combo.findData("cruise")
-        if combo_index >= 0:
-            self.flight_condition_combo.setCurrentIndex(combo_index)
-
-        saved_load_factor = (
-            self.project.analysis.structural_analysis.get("flight_condition", {}).get("load_factor")
-            if self.project.analysis.structural_analysis
-            else None
-        )
-        if saved_load_factor is not None:
-            self.load_factor_spin.setValue(float(saved_load_factor))
-        
-        # Restore structural analysis results if they exist
-        if self.project.analysis.structural_analysis:
-            self.analysis_result = self.project.analysis.structural_analysis
-            if 'structure' in self.analysis_result:
-                self._update_summary(self.analysis_result)
-                self._update_plots(self.analysis_result)
-                self.export_report_btn.setEnabled(True)

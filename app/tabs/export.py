@@ -55,9 +55,6 @@ from services.export.dxf_export import (
 from services.export.dxf_export import (
     SparExportParams as DxfSparParams,
 )
-from services.export.step_export import build_full_step_from_processed, write_step
-from services.step_export import build_step_from_project
-from services.export.geometry_builder import WingGeometryConfig
 from services.export.viewer import ProcessedCpacs, process_cpacs_data
 from services.geometry import AeroSandboxService
 
@@ -726,7 +723,6 @@ class ExportTab(QWidget):
             from ezdxf import units
 
             from services.export.profiles import (
-                RibProfileParams,
                 generate_elevon_rib_profile,
                 generate_grain_indicator,
                 generate_rib_profile,
@@ -737,18 +733,8 @@ class ExportTab(QWidget):
             QMessageBox.critical(self, "Error", f"Missing dependency: {e}")
             return
 
-        # Get spanwise sections from project
-        try:
-            svc = AeroSandboxService(self.project)
-            sections = svc.spanwise_sections()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to generate sections: {e}")
-            return
-
-        if not sections:
-            QMessageBox.warning(
-                self, "Error", "No sections available. Check project geometry."
-            )
+        sections = self._spanwise_sections_for_export()
+        if sections is None:
             return
 
         output_dir = QFileDialog.getExistingDirectory(
@@ -758,20 +744,7 @@ class ExportTab(QWidget):
             return
 
         try:
-            # Get structural parameters from project (set in Structure tab)
-            plan = self.project.wing.planform
-
-            params = RibProfileParams(
-                include_spar_notches=self.dxf_add_spar_notches.isChecked(),
-                include_stringer_slots=self.dxf_add_stringer_cutouts.isChecked(),
-                include_lightening_holes=self.dxf_add_lightening_holes.isChecked(),
-                include_elevon_cutout=self.dxf_add_elevon_cutouts.isChecked(),
-                spar_notch_clearance_mm=self.dxf_spar_notch_clearance.value(),
-                spar_notch_depth_percent=self.dxf_notch_depth_percent.value(),
-                stringer_slot_clearance_mm=self.dxf_stringer_slot_clearance.value(),
-                lightening_hole_margin_mm=plan.lightening_hole_margin_mm,
-                lightening_hole_shape=plan.lightening_hole_shape,
-            )
+            params = self._dxf_rib_params()
             # Note: Rib thickness, spar thickness, stringer dimensions are read
             # from project.wing.planform inside generate_rib_profile()
 
@@ -786,12 +759,7 @@ class ExportTab(QWidget):
                     print(f"Skipping section {section.index}: {e}")
                     continue
 
-                # Create DXF document for main rib
-                doc = ezdxf.new("R2010")
-                doc.header["$INSUNITS"] = units.MM
-                doc.layers.add(name="CUT", color=1)  # Red = cut
-                doc.layers.add(name="ENGRAVE", color=5)  # Blue = engrave
-                msp = doc.modelspace()
+                doc, msp = self._new_dxf_doc(ezdxf, units)
 
                 # Draw main outline
                 if len(profile.outline) >= 3:
@@ -886,26 +854,15 @@ class ExportTab(QWidget):
                 # Generate elevon rib piece if this rib has an elevon cutout
                 if profile.elevon_cutout and profile.elevon_cutout.has_cutout:
                     try:
-                        # Get deflection angle from UI (elevon_angle input)
-                        try:
-                            max_deflection = abs(float(self.elevon_angle.text()))
-                        except ValueError:
-                            max_deflection = 30.0
-
                         elevon_profile = generate_elevon_rib_profile(
                             section,
                             self.project,
                             profile.elevon_cutout,
-                            max_deflection_deg=max_deflection,
+                            max_deflection_deg=self._elevon_deflection_deg(),
                             hinge_gap_mm=params.spar_notch_clearance_mm,  # Use same clearance
                         )
                         if elevon_profile and len(elevon_profile.outline) >= 3:
-                            # Create separate DXF for elevon rib
-                            elev_doc = ezdxf.new("R2010")
-                            elev_doc.header["$INSUNITS"] = units.MM
-                            elev_doc.layers.add(name="CUT", color=1)
-                            elev_doc.layers.add(name="ENGRAVE", color=5)
-                            elev_msp = elev_doc.modelspace()
+                            elev_doc, elev_msp = self._new_dxf_doc(ezdxf, units)
 
                             # Draw elevon rib outline
                             points_2d = [
@@ -975,7 +932,6 @@ class ExportTab(QWidget):
             from ezdxf import units
 
             from services.export.profiles import (
-                SparProfileParams,
                 generate_grain_indicator,
                 generate_separated_spar_profiles,
             )
@@ -983,18 +939,8 @@ class ExportTab(QWidget):
             QMessageBox.critical(self, "Error", f"Missing dependency: {e}")
             return
 
-        # Get spanwise sections from project
-        try:
-            svc = AeroSandboxService(self.project)
-            sections = svc.spanwise_sections()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to generate sections: {e}")
-            return
-
-        if len(sections) < 2:
-            QMessageBox.warning(
-                self, "Error", "Need at least 2 sections for spar generation."
-            )
+        sections = self._spanwise_sections_for_export(min_count=2)
+        if sections is None:
             return
 
         output_dir = QFileDialog.getExistingDirectory(
@@ -1007,11 +953,7 @@ class ExportTab(QWidget):
             # Check interlocking type
             show_grain = self.dxf_show_grain.isChecked()
 
-            params = SparProfileParams(
-                include_rib_notches=True,
-                rib_notch_clearance_mm=self.dxf_rib_notch_clearance.value(),
-                rib_notch_depth_percent=self.dxf_notch_depth_percent.value(),
-            )
+            params = self._dxf_spar_params()
 
             generated_files = []
             cut_line_count = 0
@@ -1027,15 +969,7 @@ class ExportTab(QWidget):
                     continue
 
                 for profile in profiles:
-                    # Create DXF document
-                    doc = ezdxf.new("R2010")
-                    doc.header["$INSUNITS"] = units.MM
-                    doc.layers.add(name="CUT", color=1)  # Red = cut
-                    doc.layers.add(name="ENGRAVE", color=5)  # Blue = engrave
-                    doc.layers.add(
-                        name="CUTLINE", color=3
-                    )  # Green = optional cut lines
-                    msp = doc.modelspace()
+                    doc, msp = self._new_dxf_doc(ezdxf, units, include_cutline=True)
 
                     # Draw spar outline (tapered profile following airfoil)
                     # In Tabs & Slots mode, this includes tab protrusions
@@ -1161,14 +1095,11 @@ class ExportTab(QWidget):
             from ezdxf import units
 
             from services.export.dxf_export import (
-                GridNestingParams,
                 PartInfo,
                 generate_nested_layout_by_thickness,
                 generate_nested_layout_with_fitting,
             )
             from services.export.profiles import (
-                RibProfileParams,
-                SparProfileParams,
                 generate_elevon_rib_profile,
                 generate_rib_profile,
                 generate_separated_spar_profiles,
@@ -1179,18 +1110,8 @@ class ExportTab(QWidget):
             QMessageBox.critical(self, "Error", f"Missing dependency: {e}")
             return
 
-        # Get spanwise sections from project
-        try:
-            svc = AeroSandboxService(self.project)
-            sections = svc.spanwise_sections()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to generate sections: {e}")
-            return
-
-        if not sections:
-            QMessageBox.warning(
-                self, "Error", "No sections available. Check project geometry."
-            )
+        sections = self._spanwise_sections_for_export()
+        if sections is None:
             return
 
         # Ask for output file (will become base name for thickness-grouped files)
@@ -1210,17 +1131,7 @@ class ExportTab(QWidget):
             rib_thickness = plan.rib_thickness_mm
             spar_thickness = plan.spar_thickness_mm
 
-            # Generate rib params
-            rib_params = RibProfileParams(
-                include_spar_notches=self.dxf_add_spar_notches.isChecked(),
-                include_stringer_slots=self.dxf_add_stringer_cutouts.isChecked(),
-                include_lightening_holes=self.dxf_add_lightening_holes.isChecked(),
-                include_elevon_cutout=self.dxf_add_elevon_cutouts.isChecked(),
-                spar_notch_clearance_mm=self.dxf_spar_notch_clearance.value(),
-                stringer_slot_clearance_mm=self.dxf_stringer_slot_clearance.value(),
-                lightening_hole_margin_mm=plan.lightening_hole_margin_mm,
-                lightening_hole_shape=plan.lightening_hole_shape,
-            )
+            rib_params = self._dxf_rib_params()
 
             # List of PartInfo with thickness tracking
             parts: list[PartInfo] = []
@@ -1233,12 +1144,7 @@ class ExportTab(QWidget):
                     print(f"Skipping section {section.index}: {e}")
                     continue
 
-                # Create DXF for main rib
-                doc = ezdxf.new("R2010")
-                doc.header["$INSUNITS"] = units.MM
-                doc.layers.add(name="CUT", color=1)
-                doc.layers.add(name="ENGRAVE", color=5)
-                msp = doc.modelspace()
+                doc, msp = self._new_dxf_doc(ezdxf, units)
 
                 # Draw main outline
                 if len(profile.outline) >= 3:
@@ -1295,24 +1201,15 @@ class ExportTab(QWidget):
                 # Generate elevon rib if applicable
                 if profile.elevon_cutout and profile.elevon_cutout.has_cutout:
                     try:
-                        max_deflection = abs(float(self.elevon_angle.text()))
-                    except ValueError:
-                        max_deflection = 30.0
-
-                    try:
                         elevon_profile = generate_elevon_rib_profile(
                             section,
                             self.project,
                             profile.elevon_cutout,
-                            max_deflection_deg=max_deflection,
+                            max_deflection_deg=self._elevon_deflection_deg(),
                             hinge_gap_mm=rib_params.spar_notch_clearance_mm,
                         )
                         if elevon_profile and len(elevon_profile.outline) >= 3:
-                            elev_doc = ezdxf.new("R2010")
-                            elev_doc.header["$INSUNITS"] = units.MM
-                            elev_doc.layers.add(name="CUT", color=1)
-                            elev_doc.layers.add(name="ENGRAVE", color=5)
-                            elev_msp = elev_doc.modelspace()
+                            elev_doc, elev_msp = self._new_dxf_doc(ezdxf, units)
 
                             points_2d = [
                                 (float(p[0]), float(p[1]))
@@ -1349,11 +1246,7 @@ class ExportTab(QWidget):
                         print(f"Could not generate elevon rib: {e}")
 
             # Generate spars to temp files
-            spar_params = SparProfileParams(
-                include_rib_notches=True,
-                rib_notch_clearance_mm=self.dxf_rib_notch_clearance.value(),
-                rib_notch_depth_percent=self.dxf_notch_depth_percent.value(),
-            )
+            spar_params = self._dxf_spar_params()
 
             # Track spar profiles for splitting (only spars can be split)
             spar_profiles: dict[str, object] = {}  # filepath -> SparProfile
@@ -1368,11 +1261,7 @@ class ExportTab(QWidget):
                     continue
 
                 for idx, profile in enumerate(profiles):
-                    doc = ezdxf.new("R2010")
-                    doc.header["$INSUNITS"] = units.MM
-                    doc.layers.add(name="CUT", color=1)
-                    doc.layers.add(name="ENGRAVE", color=5)
-                    msp = doc.modelspace()
+                    doc, msp = self._new_dxf_doc(ezdxf, units)
 
                     if len(profile.outline) >= 3:
                         points_2d = [
@@ -1570,6 +1459,157 @@ class ExportTab(QWidget):
             f"Shape: {plan.lightening_hole_shape}"
         )
 
+    def sync_to_project(self):
+        if self.project is None:
+            return
+        settings = getattr(self.project.analysis, "gui_settings", None)
+        if settings is None:
+            self.project.analysis.gui_settings = {}
+            settings = self.project.analysis.gui_settings
+        settings["export_tab"] = self._collect_gui_settings()
+
+    def update_from_project(self):
+        if self.project is None:
+            return
+        settings = getattr(self.project.analysis, "gui_settings", {}).get("export_tab", {})
+        if settings:
+            self._apply_gui_settings(settings)
+        self._refresh_dxf_struct_params()
+
+    def _collect_gui_settings(self) -> Dict[str, Any]:
+        return {
+            "use_spline_wing_step": bool(self.use_spline_wing_chk.isChecked()),
+            "cut_wing_for_elevon": bool(self.cut_wing_chk.isChecked()),
+            "elevon_angle_deg": self.elevon_angle.text(),
+            "fixture_material_thickness_mm": float(self.fixture_material_thickness.value()),
+            "fixture_slot_clearance_mm": float(self.fixture_slot_clearance.value()),
+            "fixture_add_cradle": bool(self.fixture_add_cradle.isChecked()),
+            "fixture_tab_width_mm": float(self.fixture_tab_width.value()),
+            "fixture_tab_spacing_mm": float(self.fixture_tab_spacing.value()),
+            "dxf_add_spar_notches": bool(self.dxf_add_spar_notches.isChecked()),
+            "dxf_add_stringer_cutouts": bool(self.dxf_add_stringer_cutouts.isChecked()),
+            "dxf_add_elevon_cutouts": bool(self.dxf_add_elevon_cutouts.isChecked()),
+            "dxf_add_lightening_holes": bool(self.dxf_add_lightening_holes.isChecked()),
+            "dxf_show_grain": bool(self.dxf_show_grain.isChecked()),
+            "dxf_label_ribs": bool(self.dxf_label_ribs.isChecked()),
+            "dxf_label_spars": bool(self.dxf_label_spars.isChecked()),
+            "dxf_spar_notch_clearance_mm": float(self.dxf_spar_notch_clearance.value()),
+            "dxf_rib_notch_clearance_mm": float(self.dxf_rib_notch_clearance.value()),
+            "dxf_stringer_slot_clearance_mm": float(self.dxf_stringer_slot_clearance.value()),
+            "dxf_notch_depth_percent": float(self.dxf_notch_depth_percent.value()),
+            "dxf_sheet_width_mm": float(self.dxf_sheet_width.value()),
+            "dxf_sheet_height_mm": float(self.dxf_sheet_height.value()),
+            "dxf_part_spacing_mm": float(self.dxf_part_spacing.value()),
+            "dxf_edge_margin_mm": float(self.dxf_edge_margin.value()),
+            "dxf_allow_splitting": bool(self.dxf_allow_splitting.isChecked()),
+            "viewer_actor_prefs": dict(getattr(self, "viewer_actor_prefs", {}) or {}),
+        }
+
+    def _apply_gui_settings(self, settings: Dict[str, Any]) -> None:
+        def _set_spin(spin: Any, value: Any) -> None:
+            if value is None:
+                return
+            try:
+                spin.setValue(float(value))
+            except Exception:
+                return
+
+        def _set_check(check: QCheckBox, value: Any) -> None:
+            if value is not None:
+                check.setChecked(bool(value))
+
+        _set_check(self.use_spline_wing_chk, settings.get("use_spline_wing_step"))
+        _set_check(self.cut_wing_chk, settings.get("cut_wing_for_elevon"))
+        if settings.get("elevon_angle_deg") is not None:
+            self.elevon_angle.setText(str(settings.get("elevon_angle_deg")))
+        _set_spin(
+            self.fixture_material_thickness,
+            settings.get("fixture_material_thickness_mm"),
+        )
+        _set_spin(self.fixture_slot_clearance, settings.get("fixture_slot_clearance_mm"))
+        _set_check(self.fixture_add_cradle, settings.get("fixture_add_cradle"))
+        _set_spin(self.fixture_tab_width, settings.get("fixture_tab_width_mm"))
+        _set_spin(self.fixture_tab_spacing, settings.get("fixture_tab_spacing_mm"))
+        _set_check(self.dxf_add_spar_notches, settings.get("dxf_add_spar_notches"))
+        _set_check(self.dxf_add_stringer_cutouts, settings.get("dxf_add_stringer_cutouts"))
+        _set_check(self.dxf_add_elevon_cutouts, settings.get("dxf_add_elevon_cutouts"))
+        _set_check(self.dxf_add_lightening_holes, settings.get("dxf_add_lightening_holes"))
+        _set_check(self.dxf_show_grain, settings.get("dxf_show_grain"))
+        _set_check(self.dxf_label_ribs, settings.get("dxf_label_ribs"))
+        _set_check(self.dxf_label_spars, settings.get("dxf_label_spars"))
+        _set_spin(self.dxf_spar_notch_clearance, settings.get("dxf_spar_notch_clearance_mm"))
+        _set_spin(self.dxf_rib_notch_clearance, settings.get("dxf_rib_notch_clearance_mm"))
+        _set_spin(
+            self.dxf_stringer_slot_clearance,
+            settings.get("dxf_stringer_slot_clearance_mm"),
+        )
+        _set_spin(self.dxf_notch_depth_percent, settings.get("dxf_notch_depth_percent"))
+        _set_spin(self.dxf_sheet_width, settings.get("dxf_sheet_width_mm"))
+        _set_spin(self.dxf_sheet_height, settings.get("dxf_sheet_height_mm"))
+        _set_spin(self.dxf_part_spacing, settings.get("dxf_part_spacing_mm"))
+        _set_spin(self.dxf_edge_margin, settings.get("dxf_edge_margin_mm"))
+        _set_check(self.dxf_allow_splitting, settings.get("dxf_allow_splitting"))
+        actor_prefs = settings.get("viewer_actor_prefs")
+        if isinstance(actor_prefs, dict):
+            self.viewer_actor_prefs.update(actor_prefs)
+
+    def _spanwise_sections_for_export(self, min_count: int = 1) -> Optional[List[Any]]:
+        try:
+            sections = AeroSandboxService(self.project).spanwise_sections()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to generate sections: {e}")
+            return None
+
+        if len(sections) < min_count:
+            msg = (
+                "Need at least 2 sections for spar generation."
+                if min_count > 1
+                else "No sections available. Check project geometry."
+            )
+            QMessageBox.warning(self, "Error", msg)
+            return None
+        return sections
+
+    def _dxf_rib_params(self):
+        from services.export.profiles import RibProfileParams
+
+        plan = self.project.wing.planform
+        return RibProfileParams(
+            include_spar_notches=self.dxf_add_spar_notches.isChecked(),
+            include_stringer_slots=self.dxf_add_stringer_cutouts.isChecked(),
+            include_lightening_holes=self.dxf_add_lightening_holes.isChecked(),
+            include_elevon_cutout=self.dxf_add_elevon_cutouts.isChecked(),
+            spar_notch_clearance_mm=self.dxf_spar_notch_clearance.value(),
+            spar_notch_depth_percent=self.dxf_notch_depth_percent.value(),
+            stringer_slot_clearance_mm=self.dxf_stringer_slot_clearance.value(),
+            lightening_hole_margin_mm=plan.lightening_hole_margin_mm,
+            lightening_hole_shape=plan.lightening_hole_shape,
+        )
+
+    def _dxf_spar_params(self):
+        from services.export.profiles import SparProfileParams
+
+        return SparProfileParams(
+            include_rib_notches=True,
+            rib_notch_clearance_mm=self.dxf_rib_notch_clearance.value(),
+            rib_notch_depth_percent=self.dxf_notch_depth_percent.value(),
+        )
+
+    def _new_dxf_doc(self, ezdxf: Any, units: Any, include_cutline: bool = False):
+        doc = ezdxf.new("R2010")
+        doc.header["$INSUNITS"] = units.MM
+        doc.layers.add(name="CUT", color=1)
+        doc.layers.add(name="ENGRAVE", color=5)
+        if include_cutline:
+            doc.layers.add(name="CUTLINE", color=3)
+        return doc, doc.modelspace()
+
+    def _elevon_deflection_deg(self) -> float:
+        try:
+            return abs(float(self.elevon_angle.text()))
+        except ValueError:
+            return 30.0
+
     def load_from_file(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "Open CPACS", "", "XML Files (*.xml)"
@@ -1693,6 +1733,10 @@ class ExportTab(QWidget):
             return
 
         try:
+            from services.export.geometry_builder import WingGeometryConfig
+            from services.export.step_export import write_step
+            from services.step_export import build_step_from_project
+
             # Build config from UI options
             stringer_count = getattr(self.project.wing.planform, "stringer_count", 0) or 0
             lightening_fraction = getattr(self.project.wing.planform, "rib_lightening_fraction", 0.0) or 0.0
@@ -1739,6 +1783,7 @@ class ExportTab(QWidget):
             return
 
         try:
+            from services.export.step_export import write_step
             from services.step_export import build_cfd_wing_solid
 
             # Generate default filename: {project_name}CFD.step

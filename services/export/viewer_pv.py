@@ -614,47 +614,6 @@ def _deflect_elevon_bottom_hinge_fallback(processed: ProcessedCpacs, angle_deg: 
     except Exception:
         return None
 
-def open_pyvista_window(processed: ProcessedCpacs, include_elevon: bool = True) -> bool:
-    """
-    Open a PyVista interactive window showing spars, ribs, and optionally elevon.
-    """
-    if processed is None or not getattr(processed, "success", False):
-        return False
-    if pv is None:
-        print("PyVista not available.")
-        return False
-
-    # Build meshes
-    wing_mesh = _build_wing_mesh(processed.wing_vertices)
-    spars_mesh = _build_group_mesh(processed.spar_surfaces)
-    ribs_mesh = _build_group_mesh(processed.rib_surfaces)
-
-    elevon_angle_deg = float(getattr(processed, "elevon_angle_deg", 0.0) or 0.0)
-
-    # Elevon
-    elevon_mesh = None
-    if include_elevon and getattr(processed, "elevon_surfaces", None):
-        # Use generic multi-surface deflection
-        deflected = None
-        if abs(elevon_angle_deg) > 1e-9:
-             deflected = _deflect_elevon_generic(processed, elevon_angle_deg)
-        
-        if deflected:
-            elevon_mesh = _build_group_mesh(deflected)
-        else:
-            elevon_mesh = _build_group_mesh(processed.elevon_surfaces)
-
-    cutter_mesh = _build_cutter_wedge(processed, elevon_angle_deg)
-    
-    # ... (rest of function is standard plotter setup) ...
-    
-    # Helper to populate a plotter consistently
-    def _populate(plotter_obj):
-        plotter_obj.add_axes()
-        # ... (rest same as before)
-
-
-
 def _build_wing_mesh(wing_quads: List[List[Iterable[float]]],
                      dihedraled_rib_profiles: Optional[List[np.ndarray]] = None) -> Optional[pv.PolyData]:
     """

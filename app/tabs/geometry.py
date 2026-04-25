@@ -286,6 +286,53 @@ class PlanformTab(QWidget):
             self.cs_table.setItem(i, 5, QTableWidgetItem(f"{cs.chord_end_percent:.1f}"))
         self._loading = False
 
+    def sync_to_project(self) -> None:
+        """Push all editable widgets into project state before saving."""
+        if self.project is None:
+            return
+        plan = self.project.wing.planform
+        for key, spin in self.inputs.items():
+            setattr(plan, key, float(spin.value()))
+
+        plan.center_extension_linear = bool(self.linear_check.isChecked())
+        plan.snap_to_sections = bool(self.snap_check.isChecked())
+
+        body_sections: List[BodySection] = []
+        for row in range(self.bwb_table.rowCount()):
+            try:
+                body_sections.append(
+                    BodySection(
+                        y_pos=float(self.bwb_table.item(row, 0).text()),
+                        chord=float(self.bwb_table.item(row, 1).text()),
+                        x_offset=float(self.bwb_table.item(row, 2).text()),
+                        z_offset=float(self.bwb_table.item(row, 3).text()),
+                        airfoil=(self.bwb_table.item(row, 4).text() if self.bwb_table.item(row, 4) else None),
+                    )
+                )
+            except (AttributeError, TypeError, ValueError):
+                continue
+        plan.body_sections = body_sections
+
+        control_surfaces: List[ControlSurface] = []
+        for row in range(self.cs_table.rowCount()):
+            try:
+                previous = plan.control_surfaces[row] if row < len(plan.control_surfaces) else ControlSurface()
+                control_surfaces.append(
+                    ControlSurface(
+                        name=self.cs_table.item(row, 0).text(),
+                        surface_type=self.cs_table.item(row, 1).text(),
+                        span_start_percent=float(self.cs_table.item(row, 2).text()),
+                        span_end_percent=float(self.cs_table.item(row, 3).text()),
+                        chord_start_percent=float(self.cs_table.item(row, 4).text()),
+                        chord_end_percent=float(self.cs_table.item(row, 5).text()),
+                        hinge_rel_height=previous.hinge_rel_height,
+                    )
+                )
+            except (AttributeError, TypeError, ValueError):
+                continue
+        plan.control_surfaces = control_surfaces
+        plan.reset_cache()
+
     def update_from_project(self) -> None:
         self._loading = True
         plan = self.project.wing.planform
@@ -705,6 +752,20 @@ class TwistTrimTab(QWidget):
         else:
             self.project.wing.twist_trim.structural_spanload_model = "vlm"
 
+    def sync_to_project(self) -> None:
+        """Push all editable widgets into project state before saving."""
+        if self.project is None:
+            return
+        params = self.project.wing.twist_trim
+        for key, spin in self.inputs.items():
+            setattr(params, key, float(spin.value()))
+        params.lift_distribution = self.distribution_box.currentText().lower()
+        params.structural_spanload_model = (
+            "blind_hybrid_bwb_body"
+            if self.structural_spanload_box.currentText() == "Blind Hybrid BWB"
+            else "vlm"
+        )
+
     def _on_estimate(self):
         service = AeroSandboxService(self.project)
         try:
@@ -897,6 +958,15 @@ class AirfoilTab(QWidget):
         self.project.wing.airfoil.num_sections = self.sections_spin.value()
         self._update_ui()
 
+    def sync_to_project(self) -> None:
+        """Push all editable widgets into project state before saving."""
+        if self.project is None:
+            return
+        self.project.wing.airfoil.bwb_airfoil = self.bwb_edit.text()
+        self.project.wing.airfoil.root_airfoil = self.root_edit.text()
+        self.project.wing.airfoil.tip_airfoil = self.tip_edit.text()
+        self.project.wing.airfoil.num_sections = int(self.sections_spin.value())
+
     def update_from_project(self):
         self._loading = True
         self.bwb_edit.setText(self.project.wing.airfoil.bwb_airfoil)
@@ -1057,8 +1127,10 @@ class PerformanceTab(QWidget):
         self._add_label(cruise_form, "cruise_alpha", "Angle of Attack [deg]")
         self._add_label(cruise_form, "cruise_cl", "Lift Coefficient (CL)")
         self._add_label(cruise_form, "cruise_cd", "Drag Coefficient (CD)")
+        self._add_label(cruise_form, "cruise_pressure_drag_delta_cd", "BWB Pressure Drag dCD")
         self._add_label(cruise_form, "cruise_cm", "Pitching Moment (Cm)")
-        self._add_label(cruise_form, "cruise_l_d", "Lift-to-Drag Ratio (L/D)")
+        self._add_label(cruise_form, "cruise_l_d", "Corrected Lift-to-Drag (L/D)")
+        self._add_label(cruise_form, "cruise_l_d_uncorrected", "AeroBuildup L/D")
         content_layout.addWidget(cruise_group)
         
         # Takeoff Group
@@ -1068,8 +1140,10 @@ class PerformanceTab(QWidget):
         self._add_label(takeoff_form, "takeoff_alpha", "Angle of Attack [deg]")
         self._add_label(takeoff_form, "takeoff_cl", "Lift Coefficient (CL)")
         self._add_label(takeoff_form, "takeoff_cd", "Drag Coefficient (CD)")
+        self._add_label(takeoff_form, "takeoff_pressure_drag_delta_cd", "BWB Pressure Drag dCD")
         self._add_label(takeoff_form, "takeoff_cm", "Pitching Moment (Cm)")
-        self._add_label(takeoff_form, "takeoff_l_d", "Lift-to-Drag Ratio (L/D)")
+        self._add_label(takeoff_form, "takeoff_l_d", "Corrected Lift-to-Drag (L/D)")
+        self._add_label(takeoff_form, "takeoff_l_d_uncorrected", "AeroBuildup L/D")
         content_layout.addWidget(takeoff_group)
         
         # Graphs Area
@@ -1255,3 +1329,9 @@ class GeometryTab(QTabWidget):
         
         self.perf_tab.project = self.project
         self.perf_tab.update_from_project()
+
+    def sync_to_project(self):
+        for tab in (self.planform_tab, self.twist_tab, self.airfoil_tab):
+            tab.project = self.project
+            if hasattr(tab, "sync_to_project"):
+                tab.sync_to_project()

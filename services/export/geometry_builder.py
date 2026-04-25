@@ -55,42 +55,22 @@ from services.export.profiles import (
     ElevonRibProfile,
 )
 
-# Import OCC utilities from core (use relative path from services)
-try:
-    from core.occ_utils.shapes import (
-        make_wire_from_points,
-        make_face_from_points,
-        extrude_prism,
-        loft_solid_from_wires,
-        scale_shape,
-        mirror_y,
-        make_compound,
-        make_airfoil_wire_spline,
-        make_closed_bspline_wire_from_points,
-        make_partial_airfoil_wire_spline,
-        loft_surface_from_profiles,
-        sew_faces_to_solid,
-        split_airfoil_upper_lower,
-    )
-    from core.occ_utils.booleans import cut as bool_cut, fuse as bool_fuse
-except ImportError:
-    # Fallback to refactor path for compatibility
-    from refactor.occ_utils.shapes import (
-        make_wire_from_points,
-        make_face_from_points,
-        extrude_prism,
-        loft_solid_from_wires,
-        scale_shape,
-        mirror_y,
-        make_compound,
-        make_airfoil_wire_spline,
-        make_closed_bspline_wire_from_points,
-        make_partial_airfoil_wire_spline,
-        loft_surface_from_profiles,
-        sew_faces_to_solid,
-        split_airfoil_upper_lower,
-    )
-    from refactor.occ_utils.booleans import cut as bool_cut, fuse as bool_fuse
+from core.occ_utils.shapes import (
+    make_wire_from_points,
+    make_face_from_points,
+    extrude_prism,
+    loft_solid_from_wires,
+    scale_shape,
+    mirror_y,
+    make_compound,
+    make_airfoil_wire_spline,
+    make_closed_bspline_wire_from_points,
+    make_partial_airfoil_wire_spline,
+    loft_surface_from_profiles,
+    sew_faces_to_solid,
+    split_airfoil_upper_lower,
+)
+from core.occ_utils.booleans import cut as bool_cut, fuse as bool_fuse
 
 
 # ==============================================================================

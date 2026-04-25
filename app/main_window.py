@@ -91,7 +91,26 @@ class MainWindow(QMainWindow):
         self.tab_structure.update_from_project()
         
         self.tab_export.project = self.project
-        # Export tab pulls from project on demand, but we can add an update method if needed later
+        if hasattr(self.tab_export, "update_from_project"):
+            self.tab_export.update_from_project()
+
+    def sync_tabs_to_project(self):
+        """Push current widget values into project state before saving/exporting."""
+        errors = []
+        for tab in (
+            self.tab_geometry,
+            self.tab_analysis,
+            self.tab_mission,
+            self.tab_structure,
+            self.tab_export,
+        ):
+            if hasattr(tab, "sync_to_project"):
+                try:
+                    tab.sync_to_project()
+                except Exception as exc:
+                    errors.append(f"{tab.__class__.__name__}: {exc}")
+        if errors:
+            raise RuntimeError("Failed to sync project state: " + "; ".join(errors))
 
     def new_project(self):
         self.project = Project()
@@ -111,8 +130,7 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Save Project", "", "JSON Files (*.json)")
         if path:
             try:
-                if hasattr(self.tab_mission, "sync_to_project"):
-                    self.tab_mission.sync_to_project()
+                self.sync_tabs_to_project()
                 self.project.save(path)
                 QMessageBox.information(self, "Success", "Project saved successfully.")
             except Exception as e:

@@ -211,10 +211,7 @@ class AnalysisTab(QWidget):
         self._click_cid = self.canvas.mpl_connect('button_press_event', self._on_click_contour)
 
     def _update_inputs_from_project(self):
-        # Default to Root Airfoil
-        self.source_combo.setCurrentIndex(0)
-        self.airfoil_edit.setText(self.project.wing.airfoil.root_airfoil)
-        self.airfoil_edit.setEnabled(False)
+        self.update_from_project()
 
     def _on_source_changed(self, text: str):
         if text == "Root Airfoil":
@@ -419,8 +416,98 @@ class AnalysisTab(QWidget):
         self.canvas.draw_idle()
 
     def update_from_project(self):
+        settings = getattr(self.project.analysis, "gui_settings", {}).get("analysis_tab", {})
+        if settings:
+            self._apply_gui_settings(settings)
+
         # Refresh airfoil names if they changed
         if self.source_combo.currentText() == "Root Airfoil":
             self.airfoil_edit.setText(self.project.wing.airfoil.root_airfoil)
         elif self.source_combo.currentText() == "Tip Airfoil":
             self.airfoil_edit.setText(self.project.wing.airfoil.tip_airfoil)
+
+    def sync_to_project(self):
+        if self.project is None:
+            return
+        settings = getattr(self.project.analysis, "gui_settings", None)
+        if settings is None:
+            self.project.analysis.gui_settings = {}
+            settings = self.project.analysis.gui_settings
+        settings["analysis_tab"] = self._collect_gui_settings()
+
+    def _collect_gui_settings(self) -> Dict[str, Any]:
+        return {
+            "airfoil_source": self.source_combo.currentText(),
+            "airfoil_text": self.airfoil_edit.text(),
+            "alpha_min_deg": float(self.a_min.value()),
+            "alpha_max_deg": float(self.a_max.value()),
+            "alpha_points": int(self.a_pts.value()),
+            "re_min": float(self.re_min.value()),
+            "re_max": float(self.re_max.value()),
+            "re_points": int(self.re_pts.value()),
+            "mach": float(self.mach.value()),
+            "max_ld_enabled": bool(self.chk_max_ld.isChecked()),
+            "min_cd_enabled": bool(self.chk_min_cd.isChecked()),
+            "target_cl_enabled": bool(self.chk_target_cl.isChecked()),
+            "target_cm_enabled": bool(self.chk_target_cm.isChecked()),
+            "w_max_ld": float(self.w_max_ld.value()),
+            "w_min_cd": float(self.w_min_cd.value()),
+            "w_target_cl": float(self.w_target_cl.value()),
+            "w_target_cm": float(self.w_target_cm.value()),
+            "target_cl_value": float(self.target_cl_val.value()),
+            "target_cm_value": float(self.target_cm_val.value()),
+            "opt_alpha": float(self.opt_alpha.value()),
+            "opt_re": float(self.opt_re.value()),
+            "min_tc": float(self.min_tc.value()),
+            "optimize_alpha": bool(self.opt_alpha_var.isChecked()),
+            "use_optimized_airfoil": bool(self.use_opt_check.isChecked()),
+        }
+
+    def _apply_gui_settings(self, settings: Dict[str, Any]) -> None:
+        def _set_combo(combo: QComboBox, value: Any) -> None:
+            if value is None:
+                return
+            idx = combo.findText(str(value))
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+
+        def _set_spin(spin: Any, value: Any) -> None:
+            if value is None:
+                return
+            try:
+                if hasattr(spin, "decimals"):
+                    spin.setValue(float(value))
+                else:
+                    spin.setValue(int(float(value)))
+            except Exception:
+                return
+
+        def _set_check(check: QCheckBox, value: Any) -> None:
+            if value is not None:
+                check.setChecked(bool(value))
+
+        _set_combo(self.source_combo, settings.get("airfoil_source"))
+        if self.source_combo.currentText() == "Custom":
+            self.airfoil_edit.setText(str(settings.get("airfoil_text", "")))
+        _set_spin(self.a_min, settings.get("alpha_min_deg"))
+        _set_spin(self.a_max, settings.get("alpha_max_deg"))
+        _set_spin(self.a_pts, settings.get("alpha_points"))
+        _set_spin(self.re_min, settings.get("re_min"))
+        _set_spin(self.re_max, settings.get("re_max"))
+        _set_spin(self.re_pts, settings.get("re_points"))
+        _set_spin(self.mach, settings.get("mach"))
+        _set_check(self.chk_max_ld, settings.get("max_ld_enabled"))
+        _set_check(self.chk_min_cd, settings.get("min_cd_enabled"))
+        _set_check(self.chk_target_cl, settings.get("target_cl_enabled"))
+        _set_check(self.chk_target_cm, settings.get("target_cm_enabled"))
+        _set_spin(self.w_max_ld, settings.get("w_max_ld"))
+        _set_spin(self.w_min_cd, settings.get("w_min_cd"))
+        _set_spin(self.w_target_cl, settings.get("w_target_cl"))
+        _set_spin(self.w_target_cm, settings.get("w_target_cm"))
+        _set_spin(self.target_cl_val, settings.get("target_cl_value"))
+        _set_spin(self.target_cm_val, settings.get("target_cm_value"))
+        _set_spin(self.opt_alpha, settings.get("opt_alpha"))
+        _set_spin(self.opt_re, settings.get("opt_re"))
+        _set_spin(self.min_tc, settings.get("min_tc"))
+        _set_check(self.opt_alpha_var, settings.get("optimize_alpha"))
+        _set_check(self.use_opt_check, settings.get("use_optimized_airfoil"))

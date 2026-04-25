@@ -99,7 +99,6 @@ def _deflect_elevon_bottom_hinge_mat(processed: ProcessedCpacs, angle_deg: float
                 new_surface.append([np.array(p, dtype=float) for p in rotated_face])
             deflected.append(new_surface)
         return deflected
-        return deflected
     except Exception:
         return None
 
@@ -299,7 +298,7 @@ def process_cpacs_data(xml_string: bytes | str,
     try:
         root = ET.fromstring(xml_string)
     except ET.ParseError:
-        return ProcessedCpacs(False, [], [], [], [], [], [], [], {}, 0.0, [], {})
+        return ProcessedCpacs(False, [], [], [], [], [], [], [], {}, 0.0, [], {}, {}, [], [])
 
     # Helpers from core.export
     from core.export.parsing import parse_airfoil_points

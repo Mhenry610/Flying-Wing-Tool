@@ -1375,11 +1375,20 @@ class AeroSandboxService:
         if "Cm" in res_cruise and "CM" not in res_cruise: res_cruise["CM"] = res_cruise["Cm"]
         if "Cl" in res_cruise and "CL" not in res_cruise: res_cruise["CL"] = res_cruise["Cl"]
         if "Cd" in res_cruise and "CD" not in res_cruise: res_cruise["CD"] = res_cruise["Cd"]
+        cruise_drag_correction = self._estimate_blind_body_pressure_drag_delta_cd(
+            cl=float(self._coerce_value(res_cruise.get("CL", 0.0))),
+            velocity=float(v_cruise),
+            alpha=float(alpha_cruise),
+            altitude_m=float(self.wing_project.twist_trim.cruise_altitude_m),
+        )
         
         metrics["cruise_velocity"] = v_cruise
         metrics["cruise_alpha"] = alpha_cruise
         metrics["cruise_cl"] = self._coerce_value(res_cruise.get("CL", 0.0))
-        metrics["cruise_cd"] = self._coerce_value(res_cruise.get("CD", 0.0))
+        metrics["cruise_cd_uncorrected"] = self._coerce_value(res_cruise.get("CD", 0.0))
+        metrics["cruise_pressure_drag_delta_cd"] = cruise_drag_correction
+        metrics["cruise_cd"] = metrics["cruise_cd_uncorrected"] + cruise_drag_correction
+        metrics["cruise_l_d_uncorrected"] = metrics["cruise_cl"] / max(metrics["cruise_cd_uncorrected"], 1e-6)
         metrics["cruise_cm"] = self._coerce_value(res_cruise.get("CM", 0.0))
         metrics["cruise_l_d"] = metrics["cruise_cl"] / max(metrics["cruise_cd"], 1e-6)
         
@@ -1438,11 +1447,20 @@ class AeroSandboxService:
         if "Cm" in res_to and "CM" not in res_to: res_to["CM"] = res_to["Cm"]
         if "Cl" in res_to and "CL" not in res_to: res_to["CL"] = res_to["Cl"]
         if "Cd" in res_to and "CD" not in res_to: res_to["CD"] = res_to["Cd"]
+        takeoff_drag_correction = self._estimate_blind_body_pressure_drag_delta_cd(
+            cl=float(self._coerce_value(res_to.get("CL", 0.0))),
+            velocity=float(v_takeoff),
+            alpha=float(alpha_takeoff),
+            altitude_m=0.0,
+        )
         
         metrics["takeoff_velocity"] = v_takeoff
         metrics["takeoff_alpha"] = alpha_takeoff
         metrics["takeoff_cl"] = self._coerce_value(res_to.get("CL", 0.0))
-        metrics["takeoff_cd"] = self._coerce_value(res_to.get("CD", 0.0))
+        metrics["takeoff_cd_uncorrected"] = self._coerce_value(res_to.get("CD", 0.0))
+        metrics["takeoff_pressure_drag_delta_cd"] = takeoff_drag_correction
+        metrics["takeoff_cd"] = metrics["takeoff_cd_uncorrected"] + takeoff_drag_correction
+        metrics["takeoff_l_d_uncorrected"] = metrics["takeoff_cl"] / max(metrics["takeoff_cd_uncorrected"], 1e-6)
         metrics["takeoff_cm"] = self._coerce_value(res_to.get("CM", 0.0))
         metrics["takeoff_l_d"] = metrics["takeoff_cl"] / max(metrics["takeoff_cd"], 1e-6)
         
@@ -1607,6 +1625,20 @@ class AeroSandboxService:
             cl = res.get("CL", res.get("Cl", np.zeros_like(alphas)))
             cd = res.get("CD", res.get("Cd", np.zeros_like(alphas)))
             cm = res.get("CM", res.get("Cm", np.zeros_like(alphas)))
+            cd_uncorrected = cd
+            cd_pressure_delta = _np_std.asarray(
+                [
+                    self._estimate_blind_body_pressure_drag_delta_cd(
+                        cl=float(cl_i),
+                        velocity=float(cond["velocity"]),
+                        alpha=float(alpha_i),
+                        altitude_m=float(cond["altitude"]),
+                    )
+                    for cl_i, alpha_i in zip(_np_std.asarray(cl, dtype=float), _np_std.asarray(alphas, dtype=float))
+                ],
+                dtype=float,
+            )
+            cd = cd_uncorrected + cd_pressure_delta
             
             lift = cl * q * s
             drag = cd * q * s
@@ -1616,6 +1648,8 @@ class AeroSandboxService:
             results[name] = {
                 "CL": self._coerce_value(cl),
                 "CD": self._coerce_value(cd),
+                "CD_uncorrected": self._coerce_value(cd_uncorrected),
+                "CD_pressure_drag_delta": self._coerce_value(cd_pressure_delta),
                 "CM": self._coerce_value(cm),
                 "L": self._coerce_value(lift),
                 "D": self._coerce_value(drag),
@@ -2088,6 +2122,7 @@ class AeroSandboxService:
             "symmetric_drag_floor": 0.205,
             "symmetric_form_drag_gain": 2.2,
             "cambered_drag_alpha_gain": 1.8,
+            "performance_pressure_drag_scale": 5.35,
             "relief_region_mode": "chord_0.55",
             "relief_onset_floor": 0.15,
             "relief_onset_power": 2.0,
@@ -2095,6 +2130,109 @@ class AeroSandboxService:
             "relief_cap_fraction": 0.95,
             "relief_target_scale": 1.0,
         }
+
+    def _estimate_blind_body_pressure_drag_delta_cd(
+        self,
+        cl: float,
+        velocity: float,
+        alpha: float,
+        altitude_m: Optional[float],
+    ) -> float:
+        """Estimate the BWB pressure-drag increment missing from AeroBuildup."""
+        try:
+            plan = self.wing_project.planform
+            if len(plan.body_sections) < 2:
+                return 0.0
+
+            s_ref_m2 = float(plan.actual_area())
+            if s_ref_m2 <= 0.0 or velocity <= 0.0:
+                return 0.0
+
+            body_proxies = self._build_body_geometry_proxies(s_ref_m2=s_ref_m2)
+            if body_proxies["body_area_ratio"] <= 0.0:
+                return 0.0
+
+            atmosphere = asb.Atmosphere(
+                altitude=self.wing_project.twist_trim.cruise_altitude_m if altitude_m is None else altitude_m
+            )
+            q = 0.5 * float(atmosphere.density()) * float(velocity) ** 2
+            if q <= 0.0:
+                return 0.0
+
+            sections = self.spanwise_sections()
+            if len(sections) < 2:
+                return 0.0
+
+            y_half = _np_std.asarray([max(0.0, float(section.y_m)) for section in sections], dtype=float)
+            chord = _np_std.asarray([max(1e-6, float(section.chord_m)) for section in sections], dtype=float)
+            order = _np_std.argsort(y_half)
+            y_half = y_half[order]
+            chord = chord[order]
+            half_lift = 0.5 * float(cl) * q * s_ref_m2
+            chord_integral = float(_np_std.trapezoid(chord, y_half))
+            if abs(chord_integral) <= 1e-9:
+                return 0.0
+
+            lift_per_span = half_lift * chord / chord_integral
+            pressure_proxy = self._estimate_geometry_pressure_proxy(
+                y_half=y_half,
+                chord_half=chord,
+                lift_per_span_half=lift_per_span,
+                q=q,
+                s_ref_m2=s_ref_m2,
+            )
+            body_cl0_proxy = self._estimate_body_camber_cl0_proxy(body_proxies)
+            params = self._build_blind_body_model_parameters(body_proxies)
+            symmetry_factor = self._compute_body_symmetry_factor(body_cl0_proxy, body_proxies)
+            sweep_cos = max(float(params["sweep_cosine"]), 0.05)
+            symmetric_term = (
+                float(params["symmetric_drag_floor"])
+                + float(params["symmetric_form_drag_gain"]) * float(body_proxies["body_form_drag_proxy"])
+            )
+            cambered_term = (
+                (1.0 - symmetry_factor)
+                * float(params["cambered_drag_alpha_gain"])
+                * abs(float(alpha))
+                * abs(float(body_cl0_proxy))
+            )
+            delta_cd = (
+                float(body_proxies["body_area_ratio"])
+                * float(params["drag_form_factor_extra"])
+                * (symmetric_term + cambered_term)
+                * max(float(pressure_proxy), 0.0)
+                * max(0.0, float(params.get("performance_pressure_drag_scale", 1.0)))
+                / sweep_cos
+            )
+            return float(_np_std.clip(delta_cd, 0.0, 0.25))
+        except Exception as exc:
+            print(f"[Performance] BWB pressure drag correction skipped: {exc}")
+            return 0.0
+
+    @staticmethod
+    def _estimate_geometry_pressure_proxy(
+        y_half: np.ndarray,
+        chord_half: np.ndarray,
+        lift_per_span_half: np.ndarray,
+        q: float,
+        s_ref_m2: float,
+    ) -> float:
+        if len(y_half) < 2 or q <= 0.0 or s_ref_m2 <= 0.0:
+            return 0.0
+        y_half = _np_std.asarray(y_half, dtype=float)
+        chord_half = _np_std.maximum(_np_std.asarray(chord_half, dtype=float), 1e-6)
+        lift_per_span_half = _np_std.asarray(lift_per_span_half, dtype=float)
+        cl_local = _np_std.abs(lift_per_span_half) / _np_std.maximum(q * chord_half, 1e-9)
+        load_pressure = _np_std.clip((cl_local - 0.10) / 0.75, 0.0, 1.0)
+        return 2.0 * float(_np_std.trapezoid(chord_half * load_pressure, y_half)) / max(s_ref_m2, 1e-9)
+
+    @staticmethod
+    def _estimate_body_camber_cl0_proxy(body_proxies: Dict[str, float]) -> float:
+        body_area_ratio = max(0.0, float(body_proxies.get("body_area_ratio", 0.0)))
+        if body_area_ratio <= 0.0:
+            return 0.0
+        camber_area_ratio = float(body_proxies.get("body_camber_area_ratio", 0.0))
+        mean_camber = camber_area_ratio / max(body_area_ratio, 1e-9)
+        return float(_np_std.clip(4.0 * mean_camber * body_area_ratio, -0.25, 0.25))
 
     @staticmethod
     def _compute_relief_region_end(
@@ -2572,6 +2710,52 @@ class AeroSandboxService:
             return _np_std.zeros_like(y_half)
         return weights / integral
 
+    @staticmethod
+    def _preserve_root_high_spanload_shape(
+        y_half: np.ndarray,
+        lift_per_span_half: np.ndarray,
+        target_half_lift: float,
+    ) -> np.ndarray:
+        """
+        Remove artificial root/center dips from a half-span structural load.
+
+        Bell and elliptical structural loads should be highest at the centerline
+        and decay outboard. Pressure-relief diagnostics can otherwise subtract
+        from the root bin and create a nonphysical local valley that drives the
+        beam with a shape the user did not request.
+        """
+        y_half = _np_std.asarray(y_half, dtype=float)
+        adjusted = _np_std.asarray(lift_per_span_half, dtype=float).copy()
+        if len(adjusted) < 2:
+            return adjusted
+
+        for idx in range(len(adjusted) - 2, -1, -1):
+            if adjusted[idx] < adjusted[idx + 1]:
+                adjusted[idx] = adjusted[idx + 1]
+
+        current_half_lift = float(_np_std.trapezoid(adjusted, y_half))
+        if abs(current_half_lift) > 1e-9 and abs(target_half_lift) > 1e-9:
+            adjusted *= float(target_half_lift) / current_half_lift
+        return adjusted
+
+    def _guard_structural_bwb_spanload_shape(
+        self,
+        y_half: np.ndarray,
+        lift_per_span_half: np.ndarray,
+    ) -> np.ndarray:
+        plan = self.wing_project.planform
+        if len(plan.body_sections) < 2:
+            return lift_per_span_half
+        lift_dist_type = str(getattr(self.wing_project.twist_trim, "lift_distribution", "") or "").lower()
+        if lift_dist_type not in {"bell", "elliptical"}:
+            return lift_per_span_half
+        target_half_lift = float(_np_std.trapezoid(lift_per_span_half, y_half))
+        return self._preserve_root_high_spanload_shape(
+            y_half=y_half,
+            lift_per_span_half=lift_per_span_half,
+            target_half_lift=target_half_lift,
+        )
+
     def _apply_blind_hybrid_body_spanload(
         self,
         y_half: np.ndarray,
@@ -2621,8 +2805,9 @@ class AeroSandboxService:
         zero = _np_std.zeros_like(lift_per_span_half)
         delta_lift_per_span = _np_std.asarray(distributed_delta.get("delta_lift_per_span_half", zero), dtype=float)
         if not _np_std.any(_np_std.abs(delta_lift_per_span) > 1e-12):
-            return y_half, lift_per_span_half
+            return y_half, self._guard_structural_bwb_spanload_shape(y_half, lift_per_span_half)
         adjusted = _np_std.asarray(lift_per_span_half, dtype=float) + delta_lift_per_span
+        adjusted = self._guard_structural_bwb_spanload_shape(y_half, adjusted)
 
         print(
             "[AeroStructural] Blind hybrid BWB spanload applied "
@@ -2878,7 +3063,7 @@ class AeroSandboxService:
                             q=q,
                             s_ref_m2=plan.actual_area(),
                         )
-                    return y_out, lift_per_span
+                    return y_out, self._guard_structural_bwb_spanload_shape(y_out, lift_per_span)
                     
             except Exception as e:
                 print(f"[AeroStructural] VLM failed: {e}, falling back to AeroBuildup")
@@ -2943,7 +3128,7 @@ class AeroSandboxService:
                     q=q,
                     s_ref_m2=plan.actual_area(),
                 )
-            return y_out, lift_per_span
+            return y_out, self._guard_structural_bwb_spanload_shape(y_out, lift_per_span)
             
         except Exception as e:
             print(f"[AeroStructural] AeroBuildup also failed: {e}")
@@ -2974,7 +3159,18 @@ class AeroSandboxService:
             lift_per_span = q0 * shape
             
             print(f"[AeroStructural] Using weight-based {lift_dist_type} fallback")
-            return y_out, lift_per_span
+            if analysis_method == "blind_hybrid_bwb_body":
+                return self._apply_blind_hybrid_body_spanload(
+                    y_half=y_out,
+                    lift_per_span_half=lift_per_span,
+                    velocity=velocity,
+                    alpha=alpha,
+                    load_factor=load_factor,
+                    altitude_m=altitude_m,
+                    q=q,
+                    s_ref_m2=plan.actual_area(),
+                )
+            return y_out, self._guard_structural_bwb_spanload_shape(y_out, lift_per_span)
 
     def get_spanwise_moment_distribution(
         self,
