@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.state import Project
 from services.optimization import OptimizationService
 from app.tabs.geometry import GeometryTab
-from app.tabs.analysis import AnalysisTab
+from app.tabs.analysis import AnalysisWorkspace
 from app.tabs.mission import MissionTab
 from app.tabs.export import ExportTab
 from app.tabs.structure import StructureTab
@@ -65,7 +65,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
         
         self.tab_geometry = GeometryTab(self.project)
-        self.tab_analysis = AnalysisTab(self.project)
+        self.tab_analysis = AnalysisWorkspace(self.project)
         self.tab_mission = MissionTab(self.project)
         self.tab_structure = StructureTab(self.project)
         self.tab_export = ExportTab(self.project)
@@ -80,7 +80,7 @@ class MainWindow(QMainWindow):
         """Notify tabs to update their UI from the project state."""
         self.tab_geometry.project = self.project
         self.tab_geometry.update_from_project()
-        
+
         self.tab_analysis.project = self.project
         self.tab_analysis.update_from_project()
         
@@ -97,8 +97,11 @@ class MainWindow(QMainWindow):
     def sync_tabs_to_project(self):
         """Push current widget values into project state before saving/exporting."""
         errors = []
+        try:
+            self.tab_geometry.sync_to_project()
+        except Exception as exc:
+            errors.append(f"{self.tab_geometry.__class__.__name__}: {exc}")
         for tab in (
-            self.tab_geometry,
             self.tab_analysis,
             self.tab_mission,
             self.tab_structure,

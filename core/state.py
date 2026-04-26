@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, asdict
 from typing import List, Optional, Dict, Any
 import os
 
+from core.aircraft import AircraftProject
 from core.models.project import WingProject
 from services.mission.planner import MissionSegment, AeroConfig
 from services.mission.motor import MotorProp
@@ -13,7 +14,8 @@ from services.mission.motor import MotorProp
 # Schema version for project files
 # v0: implicit (no version field) - legacy format with elevon_* fields
 # v1: BWB format with body_sections and control_surfaces lists
-CURRENT_SCHEMA_VERSION = 1
+# v2: AircraftProject compatibility layer with first-class surfaces
+CURRENT_SCHEMA_VERSION = 2
 
 @dataclass
 class MissionProfile:
@@ -100,13 +102,61 @@ class AnalysisResults:
 @dataclass
 class Project:
     wing: WingProject = field(default_factory=WingProject)
+    aircraft: AircraftProject = field(default_factory=AircraftProject)
     mission: MissionProfile = field(default_factory=MissionProfile)
     analysis: AnalysisResults = field(default_factory=AnalysisResults)
+
+    def __post_init__(self) -> None:
+        if not self.aircraft.surfaces:
+            self.aircraft = AircraftProject.from_legacy_project(self.wing, self.mission, self.analysis)
+
+    def sync_legacy_wing_to_aircraft(self) -> None:
+        """Keep the aircraft main-wing surface aligned with the legacy wing editor.
+
+        The current GUI still owns many detailed flying-wing inputs through
+        ``Project.wing``. This method updates only the corresponding main-wing
+        surface and leaves additional tails, fins, bodies, mass items, and CPACS
+        references intact.
+        """
+        from core.aircraft.surfaces import LiftingSurface
+
+        migrated = LiftingSurface.from_legacy_wing(self.wing)
+        for idx, surface in enumerate(self.aircraft.surfaces):
+            if surface.uid == "main_wing":
+                migrated.transform = surface.transform
+                migrated.symmetry = surface.symmetry
+                migrated.local_span_axis = surface.local_span_axis
+                migrated.incidence_deg = surface.incidence_deg
+                migrated.external_refs.update(surface.external_refs)
+                self.aircraft.surfaces[idx] = migrated
+                break
+        else:
+            self.aircraft.surfaces.insert(0, migrated)
+        self.aircraft.reference.reference_area_m2 = self.wing.planform.actual_area()
+        self.aircraft.reference.reference_span_m = self.wing.planform.actual_span()
+        self.aircraft.reference.reference_chord_m = self.wing.planform.mean_aerodynamic_chord()
+
+    def sync_aircraft_main_wing_to_legacy(self) -> None:
+        """Expose the current AircraftProject main wing through legacy fields.
+
+        Older services and exporters still read ``Project.wing``. Until those are
+        fully converted, this keeps their behavior aligned with the selected
+        aircraft main wing.
+        """
+        for surface in self.aircraft.surfaces:
+            role = surface.role.value if hasattr(surface.role, "value") else str(surface.role)
+            if surface.uid == "main_wing" or role == "main_wing":
+                self.wing.name = self.aircraft.metadata.name or self.wing.name
+                self.wing.planform = surface.planform
+                self.wing.airfoil = surface.airfoils
+                self.wing.optimized_twist_deg = list(surface.twist.twist_deg) if surface.twist.twist_deg else self.wing.optimized_twist_deg
+                return
     
     def to_dict(self) -> dict:
         return {
             "schema_version": CURRENT_SCHEMA_VERSION,
             "wing": self.wing.as_dict(),
+            "aircraft": self.aircraft.as_dict(),
             "mission": self.mission.as_dict(),
             "analysis": self.analysis.as_dict()
         }
@@ -169,8 +219,7 @@ class Project:
                 span_start_percent=elevon_root_span,
                 span_end_percent=100.0,
                 chord_start_percent=100.0 - elevon_root_chord,  # Convert to xsi (from TE)
-                chord_end_percent=100.0,
-                hinge_line_percent=100.0 - elevon_root_chord,
+                chord_end_percent=100.0 - elevon_tip_chord,
                 hinge_rel_height=0.0  # Default to bottom hinge
             )]
             logging.info(f"Migrated legacy elevon fields to ControlSurface: {control_surfaces[0].name}")
@@ -204,8 +253,14 @@ class Project:
         
         mission = MissionProfile.from_dict(data.get("mission", {}))
         analysis = AnalysisResults.from_dict(data.get("analysis", {}))
+        if data.get("aircraft"):
+            aircraft = AircraftProject.from_dict(data.get("aircraft", {}))
+            if not aircraft.surfaces:
+                aircraft = AircraftProject.from_legacy_project(wing, mission, analysis)
+        else:
+            aircraft = AircraftProject.from_legacy_project(wing, mission, analysis)
         
-        return cls(wing=wing, mission=mission, analysis=analysis)
+        return cls(wing=wing, aircraft=aircraft, mission=mission, analysis=analysis)
 
     def save(self, filepath: str):
         with open(filepath, 'w') as f:

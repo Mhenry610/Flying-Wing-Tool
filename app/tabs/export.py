@@ -112,6 +112,12 @@ class InlinePyVistaWidget(QWidget):
             lay.addWidget(info)
             return
 
+        if os.environ.get("QT_QPA_PLATFORM", "").lower() == "offscreen":
+            info = QLabel("3D preview disabled in offscreen Qt mode.")
+            info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lay.addWidget(info)
+            return
+
         try:
             # Construct BackgroundPlotter without popping external window
             self._plotter = BackgroundPlotter(show=False)

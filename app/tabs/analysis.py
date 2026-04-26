@@ -10,11 +10,12 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget, QGridLayout, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QDoubleSpinBox, QSpinBox, QPushButton, QGroupBox, QMessageBox,
-    QComboBox, QCheckBox, QScrollArea, QSplitter
+    QComboBox, QCheckBox, QScrollArea, QSplitter, QTabWidget
 )
 
 from core.state import Project
 from services.aero_analysis import AeroAnalysisService, OptimizationObjectives, OptimizationConstraints
+from app.tabs.geometry import AirfoilTab, PerformanceTab, TwistTrimTab
 
 class AnalysisTab(QWidget):
     def __init__(self, project: Project, parent: QWidget | None = None) -> None:
@@ -511,3 +512,35 @@ class AnalysisTab(QWidget):
         _set_spin(self.min_tc, settings.get("min_tc"))
         _set_check(self.opt_alpha_var, settings.get("optimize_alpha"))
         _set_check(self.use_opt_check, settings.get("use_optimized_airfoil"))
+
+
+class AnalysisWorkspace(QTabWidget):
+    def __init__(self, project: Project):
+        super().__init__()
+        self.project = project
+        self.twist_tab = TwistTrimTab(project)
+        self.airfoil_tab = AirfoilTab(project)
+        self.performance_tab = PerformanceTab(project)
+        self.airfoil_analysis_tab = AnalysisTab(project)
+
+        self.addTab(self.twist_tab, "Twist & Trim")
+        self.addTab(self.airfoil_tab, "Airfoil")
+        self.addTab(self.performance_tab, "Performance")
+        self.addTab(self.airfoil_analysis_tab, "2D Airfoil Study")
+
+        self.twist_tab.dataChanged.connect(self.airfoil_tab.update_from_project)
+
+    def update_from_project(self):
+        for tab in self._tabs():
+            tab.project = self.project
+            if hasattr(tab, "update_from_project"):
+                tab.update_from_project()
+
+    def sync_to_project(self):
+        for tab in self._tabs():
+            tab.project = self.project
+            if hasattr(tab, "sync_to_project"):
+                tab.sync_to_project()
+
+    def _tabs(self):
+        return (self.twist_tab, self.airfoil_tab, self.performance_tab, self.airfoil_analysis_tab)
