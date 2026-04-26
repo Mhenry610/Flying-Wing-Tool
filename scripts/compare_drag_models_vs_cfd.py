@@ -181,6 +181,11 @@ def parse_args() -> argparse.Namespace:
             "a full comparison summary with a top-level 'calibration' block."
         ),
     )
+    parser.add_argument(
+        "--skip-aerobuildup",
+        action="store_true",
+        help="Skip the AeroBuildup reference model; useful when only strip diagnostics are needed.",
+    )
     return parser.parse_args()
 
 
@@ -1158,11 +1163,13 @@ def main() -> None:
     per_condition_results: list[dict[str, Any]] = []
 
     for condition in conditions:
-        established = run_aerobuildup_reference(
-            service=service,
-            condition=condition,
-            s_ref_m2=reference_area_m2,
-        )
+        established = None
+        if not args.skip_aerobuildup:
+            established = run_aerobuildup_reference(
+                service=service,
+                condition=condition,
+                s_ref_m2=reference_area_m2,
+            )
         low_order = run_low_order_model(
             service=service,
             condition=condition,
@@ -1220,17 +1227,18 @@ def main() -> None:
         deltas: dict[str, Any] = {}
         if cfd is not None:
             deltas = {
-                "aerobuildup_minus_cfd": {
-                    "delta_CL": established["CL"] - cfd["CL"],
-                    "delta_CD": established["CD"] - cfd["CD"],
-                    "delta_L_over_D": established["L_over_D"] - cfd["L_over_D"],
-                },
                 "low_order_minus_cfd": {
                     "delta_CL": low_order["CL"] - cfd["CL"],
                     "delta_CD": low_order["CD"] - cfd["CD"],
                     "delta_L_over_D": low_order["L_over_D"] - cfd["L_over_D"],
                 },
             }
+            if established is not None:
+                deltas["aerobuildup_minus_cfd"] = {
+                    "delta_CL": established["CL"] - cfd["CL"],
+                    "delta_CD": established["CD"] - cfd["CD"],
+                    "delta_L_over_D": established["L_over_D"] - cfd["L_over_D"],
+                }
             if calibrated is not None:
                 deltas["calibrated_bwb_surrogate_minus_cfd"] = {
                     "delta_CL": calibrated["CL"] - cfd["CL"],
@@ -1249,9 +1257,10 @@ def main() -> None:
         summary["conditions"][condition_name] = condition_block
 
         method_rows = {
-            "aerobuildup": established,
             "lifting_line_plus_sep": low_order,
         }
+        if established is not None:
+            method_rows["aerobuildup"] = established
         if calibrated is not None:
             method_rows["calibrated_bwb_surrogate"] = calibrated
         if cfd is not None:

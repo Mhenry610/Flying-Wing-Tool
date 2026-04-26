@@ -1447,8 +1447,22 @@ class AeroSandboxService:
         if "Cm" in res_to and "CM" not in res_to: res_to["CM"] = res_to["Cm"]
         if "Cl" in res_to and "CL" not in res_to: res_to["CL"] = res_to["Cl"]
         if "Cd" in res_to and "CD" not in res_to: res_to["CD"] = res_to["Cd"]
+        takeoff_raw_cl = self._coerce_value(res_to.get("CL", 0.0))
+        takeoff_lift_correction: Optional[Dict[str, Any]] = None
+        takeoff_cl = takeoff_raw_cl
+        try:
+            takeoff_lift_correction = self._estimate_takeoff_strip_limited_lift(
+                velocity=float(v_takeoff),
+                alpha=float(alpha_takeoff),
+                xyz_ref=xyz_ref,
+                s_ref_m2=float(self.wing_project.planform.actual_area()),
+            )
+            takeoff_cl = float(takeoff_lift_correction["CL_corrected"])
+        except Exception as exc:
+            print(f"[Performance] Takeoff VLM strip lift correction skipped: {exc}")
+
         takeoff_drag_correction = self._estimate_blind_body_pressure_drag_delta_cd(
-            cl=float(self._coerce_value(res_to.get("CL", 0.0))),
+            cl=float(takeoff_cl),
             velocity=float(v_takeoff),
             alpha=float(alpha_takeoff),
             altitude_m=0.0,
@@ -1456,13 +1470,27 @@ class AeroSandboxService:
         
         metrics["takeoff_velocity"] = v_takeoff
         metrics["takeoff_alpha"] = alpha_takeoff
-        metrics["takeoff_cl"] = self._coerce_value(res_to.get("CL", 0.0))
+        metrics["takeoff_cl_uncorrected"] = takeoff_raw_cl
+        metrics["takeoff_cl"] = takeoff_cl
         metrics["takeoff_cd_uncorrected"] = self._coerce_value(res_to.get("CD", 0.0))
         metrics["takeoff_pressure_drag_delta_cd"] = takeoff_drag_correction
         metrics["takeoff_cd"] = metrics["takeoff_cd_uncorrected"] + takeoff_drag_correction
         metrics["takeoff_l_d_uncorrected"] = metrics["takeoff_cl"] / max(metrics["takeoff_cd_uncorrected"], 1e-6)
         metrics["takeoff_cm"] = self._coerce_value(res_to.get("CM", 0.0))
         metrics["takeoff_l_d"] = metrics["takeoff_cl"] / max(metrics["takeoff_cd"], 1e-6)
+        if takeoff_lift_correction is not None:
+            metrics["takeoff_cl_vlm"] = float(takeoff_lift_correction["CL_vlm"])
+            metrics["takeoff_cl_strip_limited"] = float(takeoff_lift_correction["CL_strip_limited"])
+            metrics["takeoff_lift_correction_method"] = takeoff_lift_correction["method"]
+            metrics["takeoff_e_sep"] = float(takeoff_lift_correction["E_sep"])
+            metrics["takeoff_pressure_proxy"] = float(takeoff_lift_correction["pressure_proxy"])
+            metrics["takeoff_body_lift_relief_proxy"] = float(takeoff_lift_correction["body_lift_relief_proxy"])
+            metrics["takeoff_body_lift_relief_factor"] = float(takeoff_lift_correction["body_lift_relief_factor"])
+            metrics["takeoff_active_sep_strip_count"] = int(takeoff_lift_correction["active_sep_strip_count"])
+            metrics["takeoff_min_alpha_margin_deg"] = float(takeoff_lift_correction["min_alpha_margin_deg"])
+            metrics["takeoff_min_alpha_margin_y_m"] = float(takeoff_lift_correction["min_alpha_margin_y_m"])
+            metrics["takeoff_max_alpha_excess_deg"] = float(takeoff_lift_correction["max_alpha_excess_deg"])
+            metrics["takeoff_max_alpha_excess_y_m"] = float(takeoff_lift_correction["max_alpha_excess_y_m"])
         
         return metrics
 
@@ -1930,6 +1958,239 @@ class AeroSandboxService:
             dtype=float,
         )
         return 2.0 * float(_np_std.trapezoid(chord * proximity, y)) / max(s_ref_m2, 1e-9)
+
+    @staticmethod
+    def _smoothstep01(value: float) -> float:
+        t = float(_np_std.clip(value, 0.0, 1.0))
+        return t * t * (3.0 - 2.0 * t)
+
+    def _evaluate_local_section_lift_limit(
+        self,
+        airfoil: Any,
+        cl_target: float,
+        reynolds: float,
+        mach: float,
+        alpha_grid: np.ndarray,
+        polar_cache: Dict[Tuple[str, int, int], Dict[str, _np_std.ndarray]],
+        sep_slope_fraction: float = 0.7,
+        sep_thickness_start: float = 0.08,
+        sep_thickness_full: float = 0.14,
+        poststall_loss: float = 0.85,
+        poststall_width_deg: float = 6.0,
+        drag_rise_alpha_window: float = 4.0,
+    ) -> Dict[str, float]:
+        cache_key = (
+            str(getattr(airfoil, "name", "airfoil")),
+            int(round(reynolds / 5000.0)),
+            int(round(mach * 1000.0)),
+        )
+        if cache_key not in polar_cache:
+            reynolds_array = _np_std.full_like(alpha_grid, fill_value=float(reynolds), dtype=float)
+            mach_array = _np_std.full_like(alpha_grid, fill_value=float(mach), dtype=float)
+            aero = airfoil.get_aero_from_neuralfoil(alpha=alpha_grid, Re=reynolds_array, mach=mach_array)
+            polar_cache[cache_key] = {
+                "alpha_deg": _np_std.asarray(alpha_grid, dtype=float).copy(),
+                "CL": _np_std.asarray(aero["CL"], dtype=float),
+            }
+
+        polar = polar_cache[cache_key]
+        cl_values = polar["CL"]
+        alpha_values = polar["alpha_deg"]
+
+        nearest_idx = int(_np_std.argmin(_np_std.abs(cl_values - cl_target)))
+        alpha_eff = float(alpha_values[nearest_idx])
+        cl_attached = float(cl_values[nearest_idx])
+
+        dcl_dalpha = _np_std.gradient(cl_values, alpha_values)
+        linear_mask = (alpha_values >= -1.0) & (alpha_values <= 4.0)
+        if _np_std.any(linear_mask):
+            reference_slope = float(_np_std.median(dcl_dalpha[linear_mask]))
+        else:
+            reference_slope = float(_np_std.max(dcl_dalpha))
+        if not math.isfinite(reference_slope) or abs(reference_slope) < 1e-9:
+            reference_slope = float(_np_std.max(dcl_dalpha))
+
+        slope_limit = float(sep_slope_fraction) * reference_slope
+        sep_candidates = _np_std.where((alpha_values > 0.0) & (dcl_dalpha < slope_limit))[0]
+        if len(sep_candidates) > 0:
+            sep_idx = int(sep_candidates[0])
+        else:
+            sep_idx = len(alpha_values) - 1
+        alpha_sep = float(alpha_values[sep_idx])
+        cl_sep = float(cl_values[sep_idx])
+        alpha_margin = alpha_sep - alpha_eff
+        alpha_excess = max(0.0, -alpha_margin)
+
+        try:
+            thickness_ratio = float(airfoil.max_thickness())
+        except Exception:
+            thickness_ratio = 0.0
+
+        if sep_thickness_full <= sep_thickness_start:
+            thickness_factor = 1.0 if thickness_ratio > sep_thickness_start else 0.0
+        else:
+            thickness_factor = float(
+                _np_std.clip(
+                    (thickness_ratio - sep_thickness_start) / (sep_thickness_full - sep_thickness_start),
+                    0.0,
+                    1.0,
+                )
+            )
+
+        if drag_rise_alpha_window <= 1e-9:
+            onset_proximity = 1.0 if alpha_margin <= 0.0 else 0.0
+        else:
+            onset_proximity = float(_np_std.clip(1.0 - alpha_margin / drag_rise_alpha_window, 0.0, 1.0))
+
+        sep_fraction = self._smoothstep01(alpha_excess / max(float(poststall_width_deg), 1e-9))
+        poststall_retention = max(0.0, 1.0 - float(poststall_loss) * sep_fraction)
+        cl_poststall = cl_sep * poststall_retention
+        cl_limited = (1.0 - sep_fraction) * cl_attached + sep_fraction * cl_poststall
+        if cl_target >= 0.0:
+            cl_limited = min(float(cl_target), float(cl_limited))
+        else:
+            cl_limited = max(float(cl_target), float(cl_limited))
+
+        e_sep_local = self._smoothstep01(alpha_excess / 4.0)
+        return {
+            "cl_attached": cl_attached,
+            "cl_sep": cl_sep,
+            "cl_limited": float(cl_limited),
+            "alpha_eff_deg": alpha_eff,
+            "alpha_sep_deg": alpha_sep,
+            "alpha_margin_deg": alpha_margin,
+            "alpha_excess_deg": alpha_excess,
+            "sep_fraction": float(sep_fraction),
+            "e_sep_local": float(e_sep_local),
+            "onset_proximity": onset_proximity,
+            "thickness_ratio": thickness_ratio,
+            "thickness_factor": thickness_factor,
+            "reference_slope_per_deg": float(reference_slope),
+            "slope_limit_per_deg": float(slope_limit),
+        }
+
+    def _estimate_takeoff_strip_limited_lift(
+        self,
+        velocity: float,
+        alpha: float,
+        xyz_ref: List[float],
+        s_ref_m2: float,
+        n_strips: int = 81,
+    ) -> Dict[str, Any]:
+        atmosphere = asb.Atmosphere(altitude=0.0)
+        rho = float(atmosphere.density())
+        q = 0.5 * rho * float(velocity) * float(velocity)
+        mu = float(atmosphere.dynamic_viscosity())
+        speed_of_sound = float(atmosphere.speed_of_sound())
+        mach = float(velocity) / max(speed_of_sound, 1e-9)
+
+        y_half, lift_per_span_half = self.get_spanwise_lift_distribution(
+            velocity=float(velocity),
+            alpha=float(alpha),
+            n_spanwise_points=int(n_strips),
+            use_vlm=True,
+            altitude_m=0.0,
+        )
+        y_half = _np_std.asarray(y_half, dtype=float)
+        lift_per_span_half = _np_std.asarray(lift_per_span_half, dtype=float)
+
+        sections = self.spanwise_sections()
+        sec_y = _np_std.asarray([abs(section.y_m) for section in sections], dtype=float)
+        sec_chord = _np_std.asarray([section.chord_m for section in sections], dtype=float)
+        polar_cache: Dict[Tuple[str, int, int], Dict[str, _np_std.ndarray]] = {}
+        alpha_grid = _np_std.linspace(-8.0, 24.0, 129)
+        strip_rows: List[Dict[str, float]] = []
+        limited_lift_per_span_half = _np_std.zeros_like(lift_per_span_half)
+
+        for idx, y_value in enumerate(y_half):
+            chord_m = float(_np_std.interp(y_value, sec_y, sec_chord))
+            chord_m = max(chord_m, 1e-6)
+            nearest_section_index = int(_np_std.argmin(_np_std.abs(sec_y - y_value)))
+            airfoil = sections[nearest_section_index].airfoil
+            cl_local = float(lift_per_span_half[idx] / max(q * chord_m, 1e-9))
+            reynolds = float(rho * velocity * chord_m / max(mu, 1e-12))
+            local = self._evaluate_local_section_lift_limit(
+                airfoil=airfoil,
+                cl_target=cl_local,
+                reynolds=reynolds,
+                mach=mach,
+                alpha_grid=alpha_grid,
+                polar_cache=polar_cache,
+            )
+            limited_lift_per_span_half[idx] = q * chord_m * float(local["cl_limited"])
+            strip_rows.append(
+                {
+                    "y_m": float(y_value),
+                    "airfoil_name": str(getattr(airfoil, "name", "airfoil")),
+                    "section_index": float(nearest_section_index),
+                    "chord_m": chord_m,
+                    "cl_vlm_local": cl_local,
+                    "cl_attached": float(local["cl_attached"]),
+                    "cl_sep": float(local["cl_sep"]),
+                    "cl_limited": float(local["cl_limited"]),
+                    "reynolds": reynolds,
+                    "alpha_eff_deg": float(local["alpha_eff_deg"]),
+                    "alpha_sep_deg": float(local["alpha_sep_deg"]),
+                    "alpha_margin_deg": float(local["alpha_margin_deg"]),
+                    "alpha_excess_deg": float(local["alpha_excess_deg"]),
+                    "sep_fraction": float(local["sep_fraction"]),
+                    "e_sep_local": float(local["e_sep_local"]),
+                    "onset_proximity": float(local["onset_proximity"]),
+                    "thickness_ratio": float(local["thickness_ratio"]),
+                    "thickness_factor": float(local["thickness_factor"]),
+                    "lift_per_span_N_m": float(lift_per_span_half[idx]),
+                    "limited_lift_per_span_N_m": float(limited_lift_per_span_half[idx]),
+                }
+            )
+
+        base_half_lift = float(_np_std.trapezoid(lift_per_span_half, y_half))
+        limited_half_lift = float(_np_std.trapezoid(limited_lift_per_span_half, y_half))
+        base_cl = 2.0 * base_half_lift / max(q * s_ref_m2, 1e-9)
+        strip_limited_cl = 2.0 * limited_half_lift / max(q * s_ref_m2, 1e-9)
+
+        chord = _np_std.asarray([float(row["chord_m"]) for row in strip_rows], dtype=float)
+        e_sep = _np_std.asarray([float(row["e_sep_local"]) for row in strip_rows], dtype=float)
+        if len(y_half) >= 2:
+            e_sep_area = 2.0 * float(_np_std.trapezoid(chord * e_sep, y_half)) / max(s_ref_m2, 1e-9)
+        else:
+            e_sep_area = 0.0
+        pressure_proxy = self._compute_pressure_proxy_from_strip_rows(strip_rows, s_ref_m2=s_ref_m2)
+
+        body_lift_relief_proxy = pressure_proxy
+        if len(self.wing_project.planform.body_sections) >= 2:
+            body_proxies = self._build_body_geometry_proxies(s_ref_m2=s_ref_m2)
+            body_area_ratio = max(0.0, float(body_proxies.get("body_area_ratio", 0.0)))
+            body_lift_relief_proxy = pressure_proxy + 0.45 * body_area_ratio
+            body_lift_relief_factor = float(_np_std.clip(1.02 - 1.15 * body_lift_relief_proxy, 0.55, 1.05))
+        else:
+            body_lift_relief_proxy = 0.0
+            body_lift_relief_factor = 1.0
+
+        corrected_cl = strip_limited_cl * body_lift_relief_factor
+        corrected_half_lift = limited_half_lift * body_lift_relief_factor
+        active_sep = sum(1 for row in strip_rows if float(row["alpha_excess_deg"]) > 0.0)
+        min_margin_row = min(strip_rows, key=lambda row: float(row["alpha_margin_deg"])) if strip_rows else {}
+        max_excess_row = max(strip_rows, key=lambda row: float(row["alpha_excess_deg"])) if strip_rows else {}
+
+        return {
+            "CL_vlm": float(base_cl),
+            "CL_strip_limited": float(strip_limited_cl),
+            "CL_corrected": float(corrected_cl),
+            "lift_N_vlm": float(2.0 * base_half_lift),
+            "lift_N_strip_limited": float(2.0 * limited_half_lift),
+            "lift_N_corrected": float(2.0 * corrected_half_lift),
+            "E_sep": float(e_sep_area),
+            "pressure_proxy": float(pressure_proxy),
+            "body_lift_relief_proxy": float(body_lift_relief_proxy),
+            "body_lift_relief_factor": float(body_lift_relief_factor),
+            "active_sep_strip_count": int(active_sep),
+            "min_alpha_margin_deg": float(min_margin_row.get("alpha_margin_deg", 0.0) or 0.0),
+            "min_alpha_margin_y_m": float(min_margin_row.get("y_m", 0.0) or 0.0),
+            "max_alpha_excess_deg": float(max_excess_row.get("alpha_excess_deg", 0.0) or 0.0),
+            "max_alpha_excess_y_m": float(max_excess_row.get("y_m", 0.0) or 0.0),
+            "strip_rows": strip_rows,
+            "method": "vlm_strip_limited",
+        }
 
     def _evaluate_local_section_onset(
         self,

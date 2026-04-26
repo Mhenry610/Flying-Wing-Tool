@@ -39,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reference-density", type=float, default=1.225, help="Reference density in kg/m^3.")
     parser.add_argument("--reference-velocity", type=float, help="Override reference velocity in m/s.")
     parser.add_argument("--average-count", type=int, default=20, help="Number of trailing iterations to average.")
+    parser.add_argument("--skip-plots", action="store_true", help="Write JSON only and skip Matplotlib plot generation.")
     return parser.parse_args()
 
 
@@ -204,30 +205,35 @@ def main() -> None:
         result["interpretation"] = {
             "drag_mismatch_is_pressure_dominated": drag_breakdown["pressure_drag"] > drag_breakdown["viscous_drag"],
             "note": (
-                "Pressure drag alone exceeds the low-order cruise drag when the comparison target is supplied."
+                f"Pressure drag alone exceeds the low-order {target_label} drag when the comparison target is supplied."
                 if drag_breakdown["pressure_drag"] > (float(target_metrics["cd"]) * q * actual_area)
-                else "Pressure drag does not exceed the low-order cruise drag in this normalization."
+                else f"Pressure drag does not exceed the low-order {target_label} drag in this normalization."
             ),
         }
 
     summary_name = args.case_name or case_root.stem
     summary_path = output_dir / f"{summary_name}_summary.json"
     summary_path.write_text(json.dumps(result, indent=2))
+    if args.skip_plots:
+        print(f"Wrote summary: {summary_path}")
+        return
 
     times = [row["time"] for row in combined]
     fig, axes = plt.subplots(2, 1, figsize=(8, 7), sharex=True)
     axes[0].plot(times, [row["Cl_scaled"] for row in combined], label="BARAM Cl", color="tab:blue")
     axes[0].plot(times, [row["Cd_scaled"] for row in combined], label="BARAM Cd", color="tab:red")
     if target_metrics is not None:
-        axes[0].axhline(float(target_metrics["cl"]), linestyle="--", color="tab:blue", alpha=0.6, label="Target Cl")
-        axes[0].axhline(float(target_metrics["cd"]), linestyle="--", color="tab:red", alpha=0.6, label="Target Cd")
+        target_x = [min(times), max(times)]
+        axes[0].plot(target_x, [float(target_metrics["cl"])] * 2, linestyle="--", color="tab:blue", alpha=0.6, label="Target Cl")
+        axes[0].plot(target_x, [float(target_metrics["cd"])] * 2, linestyle="--", color="tab:red", alpha=0.6, label="Target Cd")
     axes[0].set_ylabel("Coefficient")
     axes[0].grid(True, alpha=0.3)
     axes[0].legend(loc="best", fontsize=8)
 
     axes[1].plot(times, [row["L_over_D"] for row in combined], label="BARAM L/D", color="tab:green")
     if target_metrics is not None:
-        axes[1].axhline(float(target_metrics["l_d"]), linestyle="--", color="tab:green", alpha=0.6, label="Target L/D")
+        target_x = [min(times), max(times)]
+        axes[1].plot(target_x, [float(target_metrics["l_d"])] * 2, linestyle="--", color="tab:green", alpha=0.6, label="Target L/D")
     axes[1].set_xlabel("Iteration / monitor time")
     axes[1].set_ylabel("L/D")
     axes[1].grid(True, alpha=0.3)

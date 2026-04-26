@@ -321,6 +321,9 @@ def run_postprocess_stage(manifest: dict[str, object], variant: dict[str, object
         str(report_output_dir),
         "--case-name",
         str(variant["name"]),
+        "--condition-name",
+        str(variant["condition"]),
+        "--skip-plots",
     ]
     run_command(command, cwd=script_dir, preview=preview)
     variant["postprocess_summary"] = str(report_output_dir / f"{variant['name']}_summary.json")
