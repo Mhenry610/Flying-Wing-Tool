@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
 from PyQt6 import QtGui, QtWidgets
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -20,6 +20,9 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QHeaderView,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -38,6 +41,7 @@ except ImportError:
 
 from core.state import Project
 from core.flow5_gen import export_flow5_project
+from services.cpacs import CPACSAdapter, OptionalTiGLService
 
 # CPACS imports - still needed for 3D preview functionality
 from core.export.cpacs_gen import generate_cpacs_xml
@@ -362,6 +366,8 @@ class InlinePyVistaWidget(QWidget):
 
 
 class ExportTab(QWidget):
+    dataChanged = pyqtSignal()
+
     def __init__(self, project: Project):
         super().__init__()
         self.project = project
@@ -441,6 +447,9 @@ class ExportTab(QWidget):
                 "opacity": default_opacity_m,
             }
 
+        cpacs_group = self._build_aircraft_cpacs_group()
+        root.addWidget(cpacs_group, 0)
+
         # === Fixture Export Section ===
         fixture_group = self._build_fixture_group()
         root.addWidget(fixture_group, 0)
@@ -448,11 +457,64 @@ class ExportTab(QWidget):
         # === DXF Export Section (below controls, above 3D viewer) ===
         dxf_group = self._build_dxf_group()
         root.addWidget(dxf_group, 0)
+        self.manufacturing_scope_label = QLabel("")
+        root.addWidget(self.manufacturing_scope_label, 0)
 
         # Inline PyVista viewport
         self.inline_pv = InlinePyVistaWidget(self)
         self.inline_pv.setMinimumHeight(400)
         root.addWidget(self.inline_pv, 1)
+
+    def _build_aircraft_cpacs_group(self) -> QGroupBox:
+        group = QGroupBox("Aircraft CPACS Import / Export")
+        layout = QVBoxLayout(group)
+
+        form = QFormLayout()
+        self.cpacs_version_edit = QLineEdit("3.5")
+        form.addRow("Target CPACS version", self.cpacs_version_edit)
+
+        export_row = QHBoxLayout()
+        self.cpacs_export_path = QLineEdit()
+        export_browse = QPushButton("Browse...")
+        export_browse.clicked.connect(self._choose_cpacs_export_path)
+        export_btn = QPushButton("Export Aircraft CPACS")
+        export_btn.clicked.connect(self.export_aircraft_cpacs)
+        export_row.addWidget(self.cpacs_export_path, 1)
+        export_row.addWidget(export_browse)
+        export_row.addWidget(export_btn)
+        export_widget = QWidget()
+        export_widget.setLayout(export_row)
+        form.addRow("Export file", export_widget)
+
+        import_row = QHBoxLayout()
+        self.cpacs_import_path = QLineEdit()
+        import_browse = QPushButton("Browse...")
+        import_browse.clicked.connect(self._choose_cpacs_import_path)
+        import_btn = QPushButton("Import Aircraft CPACS")
+        import_btn.clicked.connect(self.import_aircraft_cpacs)
+        validate_btn = QPushButton("Run TiGL Diagnostics")
+        validate_btn.clicked.connect(self.validate_cpacs_with_tigl)
+        import_row.addWidget(self.cpacs_import_path, 1)
+        import_row.addWidget(import_browse)
+        import_row.addWidget(import_btn)
+        import_row.addWidget(validate_btn)
+        import_widget = QWidget()
+        import_widget.setLayout(import_row)
+        form.addRow("Import/validate file", import_widget)
+        layout.addLayout(form)
+
+        self.cpacs_uid_table = QTableWidget(0, 5)
+        self.cpacs_uid_table.setHorizontalHeaderLabels(
+            ["Internal UID", "CPACS UID", "Direction", "Status", "XPath"]
+        )
+        self.cpacs_uid_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.cpacs_uid_table)
+
+        self.cpacs_diag_text = QPlainTextEdit()
+        self.cpacs_diag_text.setReadOnly(True)
+        self.cpacs_diag_text.setMaximumHeight(90)
+        layout.addWidget(self.cpacs_diag_text)
+        return group
 
     def _build_fixture_group(self) -> QGroupBox:
         """Build Fixture Export Parameters UI group."""
@@ -1465,6 +1527,134 @@ class ExportTab(QWidget):
             f"Shape: {plan.lightening_hole_shape}"
         )
 
+    def _choose_cpacs_export_path(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Aircraft CPACS",
+            self.cpacs_export_path.text() or "",
+            "CPACS XML (*.xml);;All files (*)",
+        )
+        if path:
+            self.cpacs_export_path.setText(path)
+
+    def _choose_cpacs_import_path(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import or Validate CPACS",
+            self.cpacs_import_path.text() or "",
+            "CPACS XML (*.xml);;All files (*)",
+        )
+        if path:
+            self.cpacs_import_path.setText(path)
+
+    def export_aircraft_cpacs(self) -> None:
+        if self.project is None:
+            QMessageBox.warning(self, "Export CPACS", "No project loaded.")
+            return
+        path = self.cpacs_export_path.text().strip()
+        if not path:
+            self._choose_cpacs_export_path()
+            path = self.cpacs_export_path.text().strip()
+        if not path:
+            return
+        try:
+            self.project.sync_aircraft_main_wing_to_legacy()
+            self.project.aircraft.exports.cpacs_version_target = self.cpacs_version_edit.text().strip() or "3.5"
+            result = CPACSAdapter().export_project(self.project.aircraft)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(result.xml_text)
+            self.project.aircraft.exports.last_export_path = path
+            self._populate_cpacs_uid_table([entry.as_dict() for entry in result.uid_map])
+            self._show_cpacs_diagnostics(result.diagnostics, result.references, prefix=f"Exported {len(result.uid_map)} objects to {path}.")
+            self.cpacs_root = ET.fromstring(result.xml_text)
+            self.process_and_display(result.xml_text)
+        except Exception as exc:
+            QMessageBox.critical(self, "Export CPACS", f"Aircraft CPACS export failed: {exc}")
+
+    def import_aircraft_cpacs(self) -> None:
+        if self.project is None:
+            QMessageBox.warning(self, "Import CPACS", "No project loaded.")
+            return
+        path = self.cpacs_import_path.text().strip()
+        if not path:
+            self._choose_cpacs_import_path()
+            path = self.cpacs_import_path.text().strip()
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                xml_text = handle.read()
+            result = CPACSAdapter().import_project(xml_text)
+            self.project.aircraft = result.aircraft
+            self.project.aircraft.exports.last_export_path = path
+            self.project.sync_aircraft_main_wing_to_legacy()
+            self._populate_cpacs_uid_table([entry.as_dict() for entry in result.uid_map])
+            self._show_cpacs_diagnostics(result.diagnostics, result.references, prefix=f"Imported {len(result.uid_map)} supported CPACS objects from {path}.")
+            self.process_and_display(xml_text)
+            self.dataChanged.emit()
+            QMessageBox.information(self, "Import CPACS", "Aircraft CPACS import complete.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Import CPACS", f"Aircraft CPACS import failed: {exc}")
+
+    def validate_cpacs_with_tigl(self) -> None:
+        path = self.cpacs_import_path.text().strip() or self.cpacs_export_path.text().strip()
+        xml_text = ""
+        if path:
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    xml_text = handle.read()
+            except Exception as exc:
+                QMessageBox.warning(self, "TiGL Diagnostics", f"Could not read CPACS file: {exc}")
+                return
+        elif self.cpacs_root is not None:
+            xml_text = ET.tostring(self.cpacs_root, encoding="unicode")
+        if not xml_text:
+            QMessageBox.information(self, "TiGL Diagnostics", "Choose or generate a CPACS file first.")
+            return
+        diag = OptionalTiGLService().validate_cpacs_text(xml_text)
+        lines = [f"TiGL available: {'yes' if diag.available else 'no'}"]
+        if diag.version:
+            lines.append(f"TiGL version: {diag.version}")
+        lines.extend(diag.messages)
+        self.cpacs_diag_text.setPlainText("\n".join(lines))
+
+    def _populate_cpacs_uid_table(self, uid_entries: List[Dict[str, Any]]) -> None:
+        self.cpacs_uid_table.setRowCount(len(uid_entries))
+        for row, entry in enumerate(uid_entries):
+            values = [
+                entry.get("internal_uid", ""),
+                entry.get("cpacs_uid", ""),
+                entry.get("last_sync_direction", ""),
+                entry.get("sync_status", ""),
+                entry.get("cpacs_xpath", ""),
+            ]
+            for col, value in enumerate(values):
+                self.cpacs_uid_table.setItem(row, col, QTableWidgetItem(str(value)))
+
+    def _show_cpacs_diagnostics(self, diagnostics: List[Any], references: List[Dict[str, Any]], prefix: str = "") -> None:
+        lines = [prefix] if prefix else []
+        for diag in diagnostics:
+            level = getattr(diag, "level", "info")
+            message = getattr(diag, "message", str(diag))
+            object_uid = getattr(diag, "object_uid", None)
+            target = f" [{object_uid}]" if object_uid else ""
+            lines.append(f"{level.upper()}{target}: {message}")
+        if references:
+            lines.append("References:")
+            for ref in references:
+                lines.append(f"- {ref.get('label', 'Reference')}: {ref.get('url', '')}")
+        self.cpacs_diag_text.setPlainText("\n".join(lines) if lines else "No diagnostics.")
+
+    def _refresh_manufacturing_scope_label(self) -> None:
+        surfaces = getattr(self.project.aircraft, "surfaces", []) if self.project else []
+        active = [s for s in surfaces if getattr(s, "active", True)]
+        if len(active) <= 1:
+            self.manufacturing_scope_label.setText("Manufacturing exports use the current legacy/main-wing geometry.")
+        else:
+            self.manufacturing_scope_label.setText(
+                f"Manufacturing export scope: CPACS aircraft export includes {len(active)} active surfaces; DXF/STEP/Flow5 legacy paths still use the current main-wing geometry."
+            )
+
     def sync_to_project(self):
         if self.project is None:
             return
@@ -1473,6 +1663,7 @@ class ExportTab(QWidget):
             self.project.analysis.gui_settings = {}
             settings = self.project.analysis.gui_settings
         settings["export_tab"] = self._collect_gui_settings()
+        self.project.aircraft.exports.cpacs_version_target = self.cpacs_version_edit.text().strip() or "3.5"
 
     def update_from_project(self):
         if self.project is None:
@@ -1480,6 +1671,14 @@ class ExportTab(QWidget):
         settings = getattr(self.project.analysis, "gui_settings", {}).get("export_tab", {})
         if settings:
             self._apply_gui_settings(settings)
+        self.cpacs_version_edit.setText(
+            getattr(self.project.aircraft.exports, "cpacs_version_target", "3.5") or "3.5"
+        )
+        if self.project.aircraft.exports.last_export_path:
+            self.cpacs_export_path.setText(self.project.aircraft.exports.last_export_path)
+        refs = getattr(self.project.aircraft.external_refs, "refs", {}) or {}
+        self._populate_cpacs_uid_table([v for v in refs.values() if isinstance(v, dict)])
+        self._refresh_manufacturing_scope_label()
         self._refresh_dxf_struct_params()
 
     def _collect_gui_settings(self) -> Dict[str, Any]:
@@ -1509,6 +1708,9 @@ class ExportTab(QWidget):
             "dxf_edge_margin_mm": float(self.dxf_edge_margin.value()),
             "dxf_allow_splitting": bool(self.dxf_allow_splitting.isChecked()),
             "viewer_actor_prefs": dict(getattr(self, "viewer_actor_prefs", {}) or {}),
+            "cpacs_export_path": self.cpacs_export_path.text(),
+            "cpacs_import_path": self.cpacs_import_path.text(),
+            "cpacs_version_target": self.cpacs_version_edit.text(),
         }
 
     def _apply_gui_settings(self, settings: Dict[str, Any]) -> None:
@@ -1555,12 +1757,19 @@ class ExportTab(QWidget):
         _set_spin(self.dxf_part_spacing, settings.get("dxf_part_spacing_mm"))
         _set_spin(self.dxf_edge_margin, settings.get("dxf_edge_margin_mm"))
         _set_check(self.dxf_allow_splitting, settings.get("dxf_allow_splitting"))
+        if settings.get("cpacs_export_path") is not None:
+            self.cpacs_export_path.setText(str(settings.get("cpacs_export_path")))
+        if settings.get("cpacs_import_path") is not None:
+            self.cpacs_import_path.setText(str(settings.get("cpacs_import_path")))
+        if settings.get("cpacs_version_target") is not None:
+            self.cpacs_version_edit.setText(str(settings.get("cpacs_version_target")))
         actor_prefs = settings.get("viewer_actor_prefs")
         if isinstance(actor_prefs, dict):
             self.viewer_actor_prefs.update(actor_prefs)
 
     def _spanwise_sections_for_export(self, min_count: int = 1) -> Optional[List[Any]]:
         try:
+            self.project.sync_aircraft_main_wing_to_legacy()
             sections = AeroSandboxService(self.project).spanwise_sections()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to generate sections: {e}")
@@ -1703,6 +1912,7 @@ class ExportTab(QWidget):
             return
 
         # Ask for output directory
+        self.project.sync_aircraft_main_wing_to_legacy()
         output_dir = QFileDialog.getExistingDirectory(
             self, "Select Output Directory for Flow5 Export"
         )
@@ -1739,6 +1949,7 @@ class ExportTab(QWidget):
             return
 
         try:
+            self.project.sync_aircraft_main_wing_to_legacy()
             from services.export.geometry_builder import WingGeometryConfig
             from services.export.step_export import write_step
             from services.step_export import build_step_from_project
@@ -1789,6 +2000,7 @@ class ExportTab(QWidget):
             return
 
         try:
+            self.project.sync_aircraft_main_wing_to_legacy()
             from services.export.step_export import write_step
             from services.step_export import build_cfd_wing_solid
 
@@ -1839,6 +2051,7 @@ class ExportTab(QWidget):
             return
 
         try:
+            self.project.sync_aircraft_main_wing_to_legacy()
             from services.export.geometry_builder import (
                 build_geometry_from_project,
                 WingGeometryConfig,

@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QGroupBox, QFormLayout, QComboBox, QDoubleSpinBox, QSpinBox,
-    QCheckBox, QMessageBox, QScrollArea, QSplitter, QFrame,
+    QCheckBox, QMessageBox, QScrollArea, QSplitter, QFrame, QFileDialog,
     QTextEdit, QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PyQt6.QtCore import Qt
@@ -31,6 +31,7 @@ from core.models.materials import (
 )
 from services.geometry import AeroSandboxService
 from services.aircraft import analyze_conceptual_structure
+from services.aircraft.truss import TrussGenerationSettings, export_truss_step, generate_body_truss
 from core.structures import StructuralElement, StructuralElementType, StructuralLocation, StructuralSection
 
 
@@ -270,6 +271,64 @@ class StructureTab(QWidget):
         self.struct_table.itemChanged.connect(self._on_struct_table_changed)
         generic_layout.addWidget(self.struct_table)
         main_layout.addWidget(generic_group)
+
+        truss_group = QGroupBox("Fuselage / Body Truss Framework")
+        truss_layout = QVBoxLayout(truss_group)
+        truss_controls = QHBoxLayout()
+        truss_form = QFormLayout()
+
+        self.truss_body_combo = QComboBox()
+        truss_form.addRow("Body", self.truss_body_combo)
+        self.truss_type_combo = QComboBox()
+        self.truss_type_combo.addItems(["Warren Truss", "X Truss"])
+        truss_form.addRow("Pattern", self.truss_type_combo)
+        self.truss_bays_spin = QSpinBox()
+        self.truss_bays_spin.setRange(1, 80)
+        self.truss_bays_spin.setValue(6)
+        truss_form.addRow("Bays", self.truss_bays_spin)
+        self.truss_inset_spin = QDoubleSpinBox()
+        self.truss_inset_spin.setRange(0.0, 100.0)
+        self.truss_inset_spin.setValue(5.0)
+        self.truss_inset_spin.setSuffix(" mm")
+        truss_form.addRow("Inset", self.truss_inset_spin)
+        self.truss_profile_combo = QComboBox()
+        self.truss_profile_combo.addItems(["Circular", "Rectangular"])
+        truss_form.addRow("Member profile", self.truss_profile_combo)
+        self.truss_radius_spin = QDoubleSpinBox()
+        self.truss_radius_spin.setRange(0.1, 100.0)
+        self.truss_radius_spin.setValue(3.0)
+        self.truss_radius_spin.setSuffix(" mm")
+        truss_form.addRow("Tube radius", self.truss_radius_spin)
+        self.truss_width_spin = QDoubleSpinBox()
+        self.truss_width_spin.setRange(0.1, 100.0)
+        self.truss_width_spin.setValue(6.0)
+        self.truss_width_spin.setSuffix(" mm")
+        truss_form.addRow("Rect width", self.truss_width_spin)
+        self.truss_height_spin = QDoubleSpinBox()
+        self.truss_height_spin.setRange(0.1, 100.0)
+        self.truss_height_spin.setValue(6.0)
+        self.truss_height_spin.setSuffix(" mm")
+        truss_form.addRow("Rect height", self.truss_height_spin)
+        truss_controls.addLayout(truss_form, 1)
+
+        truss_buttons = QVBoxLayout()
+        gen_truss_btn = QPushButton("Generate Truss From Body")
+        gen_truss_btn.clicked.connect(self._generate_body_truss)
+        truss_buttons.addWidget(gen_truss_btn)
+        export_truss_btn = QPushButton("Export Truss STEP")
+        export_truss_btn.clicked.connect(self._export_body_truss_step)
+        truss_buttons.addWidget(export_truss_btn)
+        truss_buttons.addStretch()
+        truss_controls.addLayout(truss_buttons)
+        truss_layout.addLayout(truss_controls)
+
+        self.truss_result_label = QLabel("No truss generated.")
+        truss_layout.addWidget(self.truss_result_label)
+        self.truss_member_table = QTableWidget(0, 4)
+        self.truss_member_table.setHorizontalHeaderLabels(["Type", "Start node", "End node", "Normal"])
+        self.truss_member_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        truss_layout.addWidget(self.truss_member_table)
+        main_layout.addWidget(truss_group)
         
         # Advanced Options Group (hidden by default, shown when "Show Advanced Properties" is checked)
         self.advanced_group = QGroupBox("Advanced Options")
@@ -1315,6 +1374,21 @@ class StructureTab(QWidget):
         self.struct_surface_combo.blockSignals(False)
         self._load_structural_elements()
 
+    def _refresh_truss_body_combo(self):
+        if not hasattr(self, "truss_body_combo") or self.project is None:
+            return
+        current = self.truss_body_combo.currentData()
+        self.truss_body_combo.blockSignals(True)
+        self.truss_body_combo.clear()
+        for body in self.project.aircraft.bodies:
+            if body.active:
+                self.truss_body_combo.addItem(f"{body.name} ({body.uid})", body.uid)
+        if current:
+            idx = self.truss_body_combo.findData(current)
+            if idx >= 0:
+                self.truss_body_combo.setCurrentIndex(idx)
+        self.truss_body_combo.blockSignals(False)
+
     def _load_structural_elements(self):
         surface = self._current_struct_surface()
         if surface is None or not hasattr(self, "struct_table"):
@@ -1434,6 +1508,78 @@ class StructureTab(QWidget):
             )
         except Exception as exc:
             QMessageBox.critical(self, "Error", f"Conceptual structure failed: {exc}")
+
+    def _truss_settings_from_ui(self) -> TrussGenerationSettings:
+        return TrussGenerationSettings(
+            body_uid=self.truss_body_combo.currentData() if hasattr(self, "truss_body_combo") else None,
+            truss_type=self.truss_type_combo.currentText(),
+            num_bays=int(self.truss_bays_spin.value()),
+            inward_offset_m=float(self.truss_inset_spin.value()) / 1000.0,
+            profile_type=self.truss_profile_combo.currentText(),
+            tube_radius_m=float(self.truss_radius_spin.value()) / 1000.0,
+            member_width_m=float(self.truss_width_spin.value()) / 1000.0,
+            member_height_m=float(self.truss_height_spin.value()) / 1000.0,
+        )
+
+    def _generate_body_truss(self):
+        try:
+            settings = self._truss_settings_from_ui()
+            result = generate_body_truss(self.project.aircraft, settings)
+            self._refresh_truss_results(result.as_dict())
+            self.summary_text.setPlainText(
+                "Body truss generated\n"
+                f"Body: {result.body_uid}\n"
+                f"Nodes: {len(result.vertices_m)}\n"
+                f"Members: {len(result.members)}\n"
+                f"Total member length: {result.total_member_length_m:.4f} m\n"
+                f"Warnings: {'; '.join(result.warnings) if result.warnings else '-'}"
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", f"Body truss generation failed: {exc}")
+
+    def _export_body_truss_step(self):
+        result = self.project.aircraft.analyses.results.get("truss_framework", {})
+        if not result:
+            QMessageBox.information(self, "Truss STEP", "Generate a body truss first.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Export Body Truss STEP", "", "STEP Files (*.stp *.step)")
+        if not path:
+            return
+        try:
+            if export_truss_step(result, path):
+                QMessageBox.information(self, "Truss STEP", f"Saved truss STEP to {path}")
+            else:
+                QMessageBox.critical(self, "Truss STEP", "STEP writer did not report success.")
+        except Exception as exc:
+            QMessageBox.critical(self, "Truss STEP", f"Truss STEP export failed: {exc}")
+
+    def _refresh_truss_results(self, result: Dict[str, Any] | None = None):
+        if not hasattr(self, "truss_member_table") or self.project is None:
+            return
+        result = result or self.project.aircraft.analyses.results.get("truss_framework", {})
+        if not result:
+            self.truss_result_label.setText("No truss generated.")
+            self.truss_member_table.setRowCount(0)
+            return
+        vertices = result.get("vertices_m", [])
+        members = result.get("members", [])
+        total_length = result.get("total_member_length_m", 0.0)
+        self.truss_result_label.setText(
+            f"Body {result.get('body_uid', '-')}: {len(vertices)} nodes, {len(members)} members, {float(total_length):.4f} m total member length"
+        )
+        self.truss_member_table.setRowCount(len(members))
+        for row, member in enumerate(members):
+            normal = member.get("panel_normal", [])
+            values = [
+                member.get("member_type", ""),
+                member.get("start_index", ""),
+                member.get("end_index", ""),
+                ", ".join(f"{float(v):.3f}" for v in normal[:3]) if normal else "",
+            ]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.truss_member_table.setItem(row, col, item)
     
     def sync_to_project(self):
         """Push all editable controls into project state before saving."""
@@ -1465,6 +1611,14 @@ class StructureTab(QWidget):
             "user_mat_density_kg_m3": float(self.user_mat_density.value()),
             "user_mat_sigma_c_MPa": float(self.user_mat_sigma_c.value()),
             "user_mat_sigma_t_MPa": float(self.user_mat_sigma_t.value()),
+            "truss_body_uid": self.truss_body_combo.currentData() if hasattr(self, "truss_body_combo") else None,
+            "truss_type": self.truss_type_combo.currentText() if hasattr(self, "truss_type_combo") else "Warren Truss",
+            "truss_bays": int(self.truss_bays_spin.value()) if hasattr(self, "truss_bays_spin") else 6,
+            "truss_inset_mm": float(self.truss_inset_spin.value()) if hasattr(self, "truss_inset_spin") else 5.0,
+            "truss_profile_type": self.truss_profile_combo.currentText() if hasattr(self, "truss_profile_combo") else "Circular",
+            "truss_radius_mm": float(self.truss_radius_spin.value()) if hasattr(self, "truss_radius_spin") else 3.0,
+            "truss_width_mm": float(self.truss_width_spin.value()) if hasattr(self, "truss_width_spin") else 6.0,
+            "truss_height_mm": float(self.truss_height_spin.value()) if hasattr(self, "truss_height_spin") else 6.0,
         }
 
     def _apply_gui_settings(self, settings: Dict[str, Any]) -> None:
@@ -1472,7 +1626,7 @@ class StructureTab(QWidget):
             if value is None:
                 return
             try:
-                spin.setValue(float(value))
+                spin.setValue(float(value) if hasattr(spin, "decimals") else int(float(value)))
             except Exception:
                 return
 
@@ -1496,12 +1650,31 @@ class StructureTab(QWidget):
         _set_spin(self.user_mat_density, settings.get("user_mat_density_kg_m3"))
         _set_spin(self.user_mat_sigma_c, settings.get("user_mat_sigma_c_MPa"))
         _set_spin(self.user_mat_sigma_t, settings.get("user_mat_sigma_t_MPa"))
+        truss_body_uid = settings.get("truss_body_uid")
+        if truss_body_uid is not None and hasattr(self, "truss_body_combo"):
+            idx = self.truss_body_combo.findData(truss_body_uid)
+            if idx >= 0:
+                self.truss_body_combo.setCurrentIndex(idx)
+        if settings.get("truss_type") is not None:
+            idx = self.truss_type_combo.findText(str(settings.get("truss_type")))
+            if idx >= 0:
+                self.truss_type_combo.setCurrentIndex(idx)
+        if settings.get("truss_profile_type") is not None:
+            idx = self.truss_profile_combo.findText(str(settings.get("truss_profile_type")))
+            if idx >= 0:
+                self.truss_profile_combo.setCurrentIndex(idx)
+        _set_spin(self.truss_bays_spin, settings.get("truss_bays"))
+        _set_spin(self.truss_inset_spin, settings.get("truss_inset_mm"))
+        _set_spin(self.truss_radius_spin, settings.get("truss_radius_mm"))
+        _set_spin(self.truss_width_spin, settings.get("truss_width_mm"))
+        _set_spin(self.truss_height_spin, settings.get("truss_height_mm"))
 
     def update_from_project(self):
         """Update UI from project state."""
         if not hasattr(self.project.wing, 'planform'):
             return
         self._refresh_struct_surface_combo()
+        self._refresh_truss_body_combo()
         
         planform = self.project.wing.planform
         
@@ -1623,6 +1796,7 @@ class StructureTab(QWidget):
             settings = getattr(self.project.analysis, "gui_settings", {}).get("structure_tab", {})
             if settings:
                 self._apply_gui_settings(settings)
+            self._refresh_truss_results()
             
         finally:
             # Re-enable signals

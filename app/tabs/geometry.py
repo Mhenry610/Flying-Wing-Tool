@@ -31,6 +31,7 @@ from core.models.planform import PlanformGeometry, BodySection, ControlSurface
 from core.models.twist_trim import TwistTrimParameters
 from services.geometry import AeroSandboxService, SpanwiseSection
 from services.aircraft import MultiSurfaceAeroService, apply_mass_balance_to_reference, compute_mass_balance
+from services.aircraft.body import analyze_bodies
 
 # --- Planform Tab ---
 class PlanformTab(QWidget):
@@ -780,8 +781,10 @@ class TwistTrimTab(QWidget):
         self.aircraft_active_surfaces_label = QLabel("-")
         aircraft_layout.addWidget(self.aircraft_active_surfaces_label)
         self.aircraft_contrib_table = QTableWidget()
-        self.aircraft_contrib_table.setColumnCount(7)
-        self.aircraft_contrib_table.setHorizontalHeaderLabels(["Surface", "Instance", "CL", "CD", "CM", "Fx [N]", "Fz [N]"])
+        self.aircraft_contrib_table.setColumnCount(10)
+        self.aircraft_contrib_table.setHorizontalHeaderLabels([
+            "Surface", "Instance", "CL", "CD", "CM", "Fx [N]", "Fz [N]", "My [N-m]", "Trim CL", "Stall margin"
+        ])
         self.aircraft_contrib_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         aircraft_layout.addWidget(self.aircraft_contrib_table)
         main_layout.addWidget(aircraft_group)
@@ -1101,14 +1104,19 @@ class TwistTrimTab(QWidget):
         self.aircraft_contrib_table.setRowCount(len(contributions))
         for row, c in enumerate(contributions):
             force = c.get("force_n", [0.0, 0.0, 0.0])
+            moment = c.get("moment_nm", [0.0, 0.0, 0.0])
+            instance_uid = c.get("instance_uid", "")
             values = [
                 c.get("surface_uid", ""),
-                c.get("instance_uid", ""),
+                instance_uid,
                 _fmt(c.get("CL")),
                 _fmt(c.get("CD")),
                 _fmt(c.get("CM")),
                 _fmt(force[0] if len(force) > 0 else None),
                 _fmt(force[2] if len(force) > 2 else None),
+                _fmt(moment[1] if len(moment) > 1 else None),
+                _fmt(trim.get("surface_cls", {}).get(instance_uid)),
+                _fmt(trim.get("stall_margins", {}).get(instance_uid)),
             ]
             for col, value in enumerate(values):
                 self.aircraft_contrib_table.setItem(row, col, QTableWidgetItem(str(value)))
@@ -2882,253 +2890,6 @@ class LiftingSurfacesTab(QWidget):
         self.update_from_project()
 
 
-class ControlSurfacesTab(QWidget):
-    COLUMNS = ["Name", "Type", "Span start %", "Span end %", "Chord inboard %", "Chord outboard %", "Hinge height"]
-
-    def __init__(self, project: Project):
-        super().__init__()
-        self.project = project
-        self._loading = False
-        self._build_ui()
-        self.update_from_project()
-
-    def _build_ui(self):
-        root = QVBoxLayout(self)
-        top = QHBoxLayout()
-        top.addWidget(QLabel("Surface"))
-        self.surface_combo = QComboBox()
-        self.surface_combo.currentIndexChanged.connect(self._load_controls)
-        top.addWidget(self.surface_combo, 1)
-        add_btn = QPushButton("Add Control")
-        add_btn.clicked.connect(self._add_control)
-        top.addWidget(add_btn)
-        remove_btn = QPushButton("Remove Control")
-        remove_btn.clicked.connect(self._remove_control)
-        top.addWidget(remove_btn)
-        root.addLayout(top)
-        self.table = QTableWidget()
-        self.table.setColumnCount(len(self.COLUMNS))
-        self.table.setHorizontalHeaderLabels(self.COLUMNS)
-        self.table.itemChanged.connect(self._on_item_changed)
-        root.addWidget(self.table)
-
-    def update_from_project(self):
-        self._loading = True
-        current = self.surface_combo.currentData()
-        self.surface_combo.clear()
-        for surface in self.project.aircraft.surfaces:
-            self.surface_combo.addItem(f"{surface.name} ({surface.uid})", surface.uid)
-        if current:
-            idx = self.surface_combo.findData(current)
-            if idx >= 0:
-                self.surface_combo.setCurrentIndex(idx)
-        self._loading = False
-        self._load_controls()
-
-    def sync_to_project(self):
-        self._write_controls()
-
-    def _surface(self) -> Optional[LiftingSurface]:
-        uid = self.surface_combo.currentData()
-        for surface in self.project.aircraft.surfaces:
-            if surface.uid == uid:
-                return surface
-        return None
-
-    def _load_controls(self, *_args):
-        surface = self._surface()
-        if surface is None:
-            return
-        self._loading = True
-        self.table.setRowCount(len(surface.control_surfaces))
-        for row, cs in enumerate(surface.control_surfaces):
-            values = [cs.name, cs.surface_type, cs.span_start_percent, cs.span_end_percent, cs.chord_start_percent, cs.chord_end_percent, cs.hinge_rel_height]
-            for col, value in enumerate(values):
-                self.table.setItem(row, col, QTableWidgetItem(f"{value:.3f}" if isinstance(value, float) else str(value)))
-        self.table.resizeColumnsToContents()
-        self._loading = False
-
-    def _write_controls(self):
-        if self._loading:
-            return
-        surface = self._surface()
-        if surface is None:
-            return
-        controls = []
-        for row in range(self.table.rowCount()):
-            try:
-                controls.append(
-                    ControlSurface(
-                        name=_table_text(self.table, row, 0, f"Control {row + 1}"),
-                        surface_type=_table_text(self.table, row, 1, "Elevator"),
-                        span_start_percent=float(_table_text(self.table, row, 2, "0")),
-                        span_end_percent=float(_table_text(self.table, row, 3, "100")),
-                        chord_start_percent=float(_table_text(self.table, row, 4, "70")),
-                        chord_end_percent=float(_table_text(self.table, row, 5, "70")),
-                        hinge_rel_height=float(_table_text(self.table, row, 6, "0.5")),
-                    )
-                )
-            except ValueError:
-                continue
-        surface.control_surfaces = controls
-        surface.planform.control_surfaces = list(controls)
-
-    def _on_item_changed(self, item):
-        self._write_controls()
-
-    def _add_control(self):
-        surface = self._surface()
-        if surface is None:
-            return
-        surface.control_surfaces.append(ControlSurface(name=f"Control {len(surface.control_surfaces) + 1}", surface_type="Elevator"))
-        surface.planform.control_surfaces = list(surface.control_surfaces)
-        self._load_controls()
-
-    def _remove_control(self):
-        surface = self._surface()
-        row = self.table.currentRow()
-        if surface is not None and 0 <= row < len(surface.control_surfaces):
-            surface.control_surfaces.pop(row)
-            surface.planform.control_surfaces = list(surface.control_surfaces)
-            self._load_controls()
-
-
-class VerticalSurfacesTab(QWidget):
-    def __init__(self, project: Project):
-        super().__init__()
-        self.project = project
-        self.figure = Figure(figsize=(6, 4))
-        self.canvas = FigureCanvas(self.figure)
-        self._build_ui()
-        self.update_from_project()
-
-    def _build_ui(self):
-        root = QVBoxLayout(self)
-        row = QHBoxLayout()
-        add_btn = QPushButton("Add Vertical Surface")
-        add_btn.clicked.connect(self._add_vertical)
-        row.addWidget(add_btn)
-        row.addStretch()
-        root.addLayout(row)
-        self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels(["UID", "Name", "Symmetry", "X", "Y", "Z", "Area"])
-        self.table.itemChanged.connect(self._write_table)
-        root.addWidget(self.table)
-        root.addWidget(self.canvas)
-
-    def update_from_project(self):
-        surfaces = self._vertical_surfaces()
-        self.table.blockSignals(True)
-        self.table.setRowCount(len(surfaces))
-        for row, surface in enumerate(surfaces):
-            values = [surface.uid, surface.name, _value(surface.symmetry), *surface.transform.origin_m, surface.planform.wing_area_m2]
-            for col, value in enumerate(values):
-                self.table.setItem(row, col, QTableWidgetItem(f"{value:.3f}" if isinstance(value, float) else str(value)))
-        self.table.blockSignals(False)
-        self._plot()
-
-    def sync_to_project(self):
-        self._write_table()
-
-    def _vertical_surfaces(self) -> List[LiftingSurface]:
-        return [s for s in self.project.aircraft.surfaces if _value(s.role) in (SurfaceRole.VERTICAL_TAIL.value, SurfaceRole.FIN.value) or _value(s.local_span_axis) in (Axis.Z.value, Axis.NEG_Z.value)]
-
-    def _write_table(self, *_args):
-        surfaces = self._vertical_surfaces()
-        for row, surface in enumerate(surfaces):
-            try:
-                surface.uid = _table_text(self.table, row, 0, surface.uid)
-                surface.name = _table_text(self.table, row, 1, surface.name)
-                surface.symmetry = _table_text(self.table, row, 2, _value(surface.symmetry))
-                x = float(_table_text(self.table, row, 3, surface.transform.origin_m[0]))
-                y = float(_table_text(self.table, row, 4, surface.transform.origin_m[1]))
-                z = float(_table_text(self.table, row, 5, surface.transform.origin_m[2]))
-                surface.transform = SurfaceTransform(origin_m=(x, y, z), orientation_euler_deg=surface.transform.orientation_euler_deg, parent_uid=surface.transform.parent_uid)
-                surface.planform.wing_area_m2 = float(_table_text(self.table, row, 6, surface.planform.wing_area_m2))
-                surface.planform.reset_cache()
-            except ValueError:
-                continue
-        self._plot()
-
-    def _add_vertical(self):
-        self.project.aircraft.surfaces.append(
-            LiftingSurface(
-                uid=f"vertical_{len(self.project.aircraft.surfaces) + 1}",
-                name="Vertical Surface",
-                role=SurfaceRole.VERTICAL_TAIL,
-                symmetry=SymmetryMode.SINGLE_CENTERLINE,
-                local_span_axis=Axis.Z,
-                transform=SurfaceTransform(origin_m=(0.8, 0.0, 0.05)),
-                planform=PlanformGeometry(wing_area_m2=0.05, aspect_ratio=1.5, taper_ratio=0.7, sweep_le_deg=15.0),
-                analysis_settings=SurfaceAnalysisSettings(cl_alpha_per_deg=0.055, zero_lift_aoa_deg=0.0, cm0=0.0, cl_max=0.9),
-            )
-        )
-        self.update_from_project()
-
-    def _plot(self):
-        self.figure.clear()
-        ax = self.figure.add_subplot(111)
-        for surface in self.project.aircraft.surfaces:
-            if not surface.active:
-                continue
-            axis = _value(surface.local_span_axis)
-            if axis in (Axis.Z.value, Axis.NEG_Z.value):
-                self._plot_vertical_surface_side(ax, surface)
-            else:
-                self._plot_lifting_surface_side(ax, surface)
-        ax.set_aspect("equal", adjustable="datalim")
-        ax.set_xlabel("X [m]")
-        ax.set_ylabel("Z [m]")
-        ax.grid(True, alpha=0.3)
-        ax.set_title("Aircraft Side View")
-        if self.project.aircraft.surfaces:
-            ax.legend(fontsize="small")
-        self.figure.tight_layout()
-        self.canvas.draw_idle()
-
-    def _plot_vertical_surface_side(self, ax, surface: LiftingSurface) -> None:
-        x0, _y, z0 = surface.transform.origin_m
-        span = surface.planform.span()
-        root = surface.planform.root_chord()
-        tip = surface.planform.tip_chord()
-        sweep = math.tan(math.radians(surface.planform.sweep_le_deg)) * span
-        direction = 1.0 if _value(surface.local_span_axis) == Axis.Z.value else -1.0
-        xs = [x0, x0 + root, x0 + sweep + tip, x0 + sweep, x0]
-        zs = [z0, z0, z0 + direction * span, z0 + direction * span, z0]
-        ax.plot(xs, zs, linewidth=2.4, color="#d62728", label=surface.name)
-
-    def _plot_lifting_surface_side(self, ax, surface: LiftingSurface) -> None:
-        x0, _y, z0 = surface.transform.origin_m
-        sections = _surface_sections_for_plot(surface)
-        try:
-            from core.naca_generator.naca456 import generate_naca_airfoil
-
-            name = surface.airfoils.root_airfoil.lower().replace("naca", "").strip()
-            x, z = generate_naca_airfoil(name, n_points=80)
-            plotted_label = False
-            for idx, section in enumerate(sections[:: max(1, len(sections) // 7)] or [{"x_le": 0.0, "y": 0.0, "chord": surface.planform.root_chord()}]):
-                chord = section["chord"]
-                x_le = x0 + section["x_le"]
-                z_le = z0 + math.tan(math.radians(surface.planform.dihedral_deg)) * section["y"]
-                twist = math.radians(surface.incidence_deg)
-                xs = []
-                zs = []
-                for xi, zi in zip(x, z):
-                    local_x = float(xi) * chord
-                    local_z = float(zi) * chord
-                    xs.append(x_le + local_x * math.cos(twist) - local_z * math.sin(twist))
-                    zs.append(z_le + local_x * math.sin(twist) + local_z * math.cos(twist))
-                ax.plot(xs, zs, linewidth=1.0, color="#1f77b4", alpha=0.55, label=surface.name if not plotted_label else None)
-                plotted_label = True
-        except Exception:
-            chord = surface.planform.root_chord()
-            thickness = 0.08 * chord
-            xs = [x0, x0 + chord, x0 + chord, x0, x0]
-            zs = [z0 - thickness / 2.0, z0 - thickness / 2.0, z0 + thickness / 2.0, z0 + thickness / 2.0, z0 - thickness / 2.0]
-            ax.plot(xs, zs, linewidth=1.5, color="#1f77b4", alpha=0.85, label=surface.name)
-
-
 class FuselageTab(QWidget):
     def __init__(self, project: Project):
         super().__init__()
@@ -3148,52 +2909,154 @@ class FuselageTab(QWidget):
         row.addStretch()
         root.addLayout(row)
         self.table = QTableWidget()
-        self.table.setColumnCount(9)
-        self.table.setHorizontalHeaderLabels(["UID", "Name", "Role", "Active", "X", "Length", "Width", "Height", "Drag area"])
+        self.table.setColumnCount(11)
+        self.table.setHorizontalHeaderLabels(["UID", "Name", "Role", "Active", "X", "Y", "Z", "Length", "Width", "Height", "Drag area"])
         self.table.itemChanged.connect(self._write_table)
+        self.table.currentCellChanged.connect(self._on_body_selection_changed)
         root.addWidget(self.table)
+
+        section_group = QGroupBox("Body Cross Sections")
+        section_layout = QVBoxLayout(section_group)
+        section_buttons = QHBoxLayout()
+        add_section_btn = QPushButton("Add Section")
+        add_section_btn.setToolTip("Add a fuselage station to the selected body.")
+        add_section_btn.clicked.connect(self._add_body_section)
+        section_buttons.addWidget(add_section_btn)
+        remove_section_btn = QPushButton("Remove Section")
+        remove_section_btn.setToolTip("Remove the selected station from the selected body.")
+        remove_section_btn.clicked.connect(self._remove_body_section)
+        section_buttons.addWidget(remove_section_btn)
+        reset_sections_btn = QPushButton("Reset From Envelope")
+        reset_sections_btn.setToolTip("Rebuild default nose, shoulder, tail sections from length, width, and height.")
+        reset_sections_btn.clicked.connect(self._reset_body_sections)
+        section_buttons.addWidget(reset_sections_btn)
+        section_buttons.addStretch()
+        section_layout.addLayout(section_buttons)
+        self.section_table = QTableWidget()
+        self.section_table.setColumnCount(6)
+        self.section_table.setHorizontalHeaderLabels(["X [m]", "Width [m]", "Height [m]", "Y offset [m]", "Z offset [m]", "Shape"])
+        self.section_table.setToolTip("Each row is a local body station. Shape accepts ellipse or rectangle.")
+        self.section_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.section_table.itemChanged.connect(self._on_section_table_changed)
+        section_layout.addWidget(self.section_table)
+        root.addWidget(section_group)
+
+        preview_group = QGroupBox("3D Preview")
+        preview_layout = QVBoxLayout(preview_group)
+        preview_controls = QHBoxLayout()
+        self.show_aero_surfaces_check = QCheckBox("Show aerodynamic surfaces")
+        self.show_aero_surfaces_check.setChecked(True)
+        self.show_aero_surfaces_check.toggled.connect(self._update_preview)
+        preview_controls.addWidget(self.show_aero_surfaces_check)
+        refresh_preview_btn = QPushButton("Refresh Preview")
+        refresh_preview_btn.clicked.connect(self._update_preview)
+        preview_controls.addWidget(refresh_preview_btn)
+        preview_controls.addStretch()
+        preview_layout.addLayout(preview_controls)
+        self.preview_figure = Figure(figsize=(6, 4))
+        self.preview_canvas = FigureCanvas(self.preview_figure)
+        self.preview_canvas.setMinimumHeight(320)
+        preview_layout.addWidget(self.preview_canvas)
+        root.addWidget(preview_group, 1)
+
+        analysis_group = QGroupBox("Body Analysis Results")
+        analysis_layout = QVBoxLayout(analysis_group)
+        analyze_btn = QPushButton("Analyze Active Bodies")
+        analyze_btn.clicked.connect(self._analyze_bodies)
+        analysis_layout.addWidget(analyze_btn)
+        self.body_results_table = QTableWidget()
+        self.body_results_table.setColumnCount(6)
+        self.body_results_table.setHorizontalHeaderLabels([
+            "Body UID", "Wetted area [m^2]", "Frontal area [m^2]", "Drag area [m^2]", "Payload volume [m^3]", "Warnings"
+        ])
+        self.body_results_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        analysis_layout.addWidget(self.body_results_table)
+        root.addWidget(analysis_group)
 
     def update_from_project(self):
         self.table.blockSignals(True)
         self.table.setRowCount(len(self.project.aircraft.bodies))
         for row, body in enumerate(self.project.aircraft.bodies):
             env = body.envelope or BodyEnvelope()
-            values = [body.uid, body.name, body.role, "yes" if body.active else "no", body.transform.origin_m[0], env.length_m, env.max_width_m, env.max_height_m, body.drag_area_estimate_m2 or 0.0]
+            values = [
+                body.uid,
+                body.name,
+                None,
+                None,
+                body.transform.origin_m[0],
+                body.transform.origin_m[1],
+                body.transform.origin_m[2],
+                env.length_m,
+                env.max_width_m,
+                env.max_height_m,
+                body.drag_area_estimate_m2 or 0.0,
+            ]
             for col, value in enumerate(values):
-                self.table.setItem(row, col, QTableWidgetItem(f"{value:.3f}" if isinstance(value, float) else str(value)))
+                if col == 2:
+                    combo = QComboBox()
+                    combo.addItems(["fuselage", "pod", "boom", "payload_bay", "placeholder"])
+                    _set_combo(combo, body.role)
+                    combo.currentTextChanged.connect(lambda *_args: self._write_table())
+                    self.table.setCellWidget(row, col, combo)
+                elif col == 3:
+                    combo = QComboBox()
+                    combo.addItems(["yes", "no"])
+                    combo.setCurrentText("yes" if body.active else "no")
+                    combo.currentTextChanged.connect(lambda *_args: self._write_table())
+                    self.table.setCellWidget(row, col, combo)
+                else:
+                    self.table.setItem(row, col, QTableWidgetItem(f"{value:.3f}" if isinstance(value, float) else str(value)))
         self.table.blockSignals(False)
         self.table.resizeColumnsToContents()
+        if self.table.currentRow() < 0 and self.table.rowCount() > 0:
+            self.table.setCurrentCell(0, 0)
+        self._load_body_sections()
+        self._refresh_body_results()
+        self._update_preview()
 
     def sync_to_project(self):
         self._write_table()
 
     def _write_table(self, *_args):
+        existing_by_uid = {body.uid: body for body in self.project.aircraft.bodies}
         bodies = []
         for row in range(self.table.rowCount()):
             try:
+                uid = _table_text(self.table, row, 0, f"body_{row + 1}")
+                existing = existing_by_uid.get(uid)
                 body = BodyObject(
-                    uid=_table_text(self.table, row, 0, f"body_{row + 1}"),
+                    uid=uid,
                     name=_table_text(self.table, row, 1, f"Body {row + 1}"),
-                    role=_table_text(self.table, row, 2, "fuselage"),
-                    active=_table_text(self.table, row, 3, "yes").lower() in ("yes", "true", "1", "active"),
+                    role=_table_combo_or_text(self.table, row, 2, "fuselage"),
+                    active=_table_combo_or_text(self.table, row, 3, "yes").lower() in ("yes", "true", "1", "active"),
                     envelope=BodyEnvelope(
-                        length_m=float(_table_text(self.table, row, 5, "0")),
-                        max_width_m=float(_table_text(self.table, row, 6, "0")),
-                        max_height_m=float(_table_text(self.table, row, 7, "0")),
+                        length_m=float(_table_text(self.table, row, 7, "0")),
+                        max_width_m=float(_table_text(self.table, row, 8, "0")),
+                        max_height_m=float(_table_text(self.table, row, 9, "0")),
                     ),
-                    drag_area_estimate_m2=float(_table_text(self.table, row, 8, "0")),
+                    drag_area_estimate_m2=float(_table_text(self.table, row, 10, "0")),
                 )
                 x = float(_table_text(self.table, row, 4, "0"))
-                body.transform.origin_m = (x, 0.0, 0.0)
+                y = float(_table_text(self.table, row, 5, "0"))
+                z = float(_table_text(self.table, row, 6, "0"))
+                body.transform.origin_m = (x, y, z)
+                if existing is not None:
+                    body.envelope.cross_sections = list((existing.envelope or BodyEnvelope()).cross_sections)
+                    body.attachments = list(existing.attachments)
+                    body.external_refs = dict(existing.external_refs)
+                    body.mass_properties = existing.mass_properties
                 bodies.append(body)
             except ValueError:
                 continue
         self.project.aircraft.bodies = bodies
+        self._load_body_sections()
+        self._update_preview()
 
     def _add_body(self):
         self.project.aircraft.bodies.append(
             BodyObject(uid=f"fuselage_{len(self.project.aircraft.bodies) + 1}", name="Fuselage", role="fuselage", envelope=BodyEnvelope(0.8, 0.12, 0.14))
         )
+        self._ensure_default_sections(self.project.aircraft.bodies[-1])
         self.update_from_project()
 
     def _remove_body(self):
@@ -3201,6 +3064,478 @@ class FuselageTab(QWidget):
         if 0 <= row < len(self.project.aircraft.bodies):
             self.project.aircraft.bodies.pop(row)
             self.update_from_project()
+
+    def _selected_body(self) -> Optional[BodyObject]:
+        row = self.table.currentRow()
+        if 0 <= row < len(self.project.aircraft.bodies):
+            return self.project.aircraft.bodies[row]
+        return None
+
+    def _on_body_selection_changed(self, *_args):
+        self._load_body_sections()
+        self._update_preview()
+
+    def _ensure_default_sections(self, body: BodyObject) -> None:
+        env = body.envelope or BodyEnvelope()
+        if env.cross_sections:
+            return
+        length = max(0.0, env.length_m)
+        width = max(0.0, env.max_width_m)
+        height = max(0.0, env.max_height_m)
+        env.cross_sections = [
+            {"x_m": 0.0, "width_m": 0.15 * width, "height_m": 0.15 * height, "centroid_y_m": 0.0, "centroid_z_m": 0.0, "shape": "ellipse"},
+            {"x_m": 0.2 * length, "width_m": width, "height_m": height, "centroid_y_m": 0.0, "centroid_z_m": 0.0, "shape": "ellipse"},
+            {"x_m": 0.8 * length, "width_m": width, "height_m": height, "centroid_y_m": 0.0, "centroid_z_m": 0.0, "shape": "ellipse"},
+            {"x_m": length, "width_m": 0.15 * width, "height_m": 0.15 * height, "centroid_y_m": 0.0, "centroid_z_m": 0.0, "shape": "ellipse"},
+        ]
+        body.envelope = env
+
+    def _load_body_sections(self):
+        if not hasattr(self, "section_table"):
+            return
+        body = self._selected_body()
+        self.section_table.blockSignals(True)
+        if body is None:
+            self.section_table.setRowCount(0)
+            self.section_table.blockSignals(False)
+            return
+        self._ensure_default_sections(body)
+        sections = sorted((body.envelope or BodyEnvelope()).cross_sections, key=lambda s: float(s.get("x_m", 0.0)))
+        self.section_table.setRowCount(len(sections))
+        for row, section in enumerate(sections):
+            values = [
+                section.get("x_m", 0.0),
+                section.get("width_m", 0.0),
+                section.get("height_m", 0.0),
+                section.get("centroid_y_m", 0.0),
+                section.get("centroid_z_m", 0.0),
+                None,
+            ]
+            for col, value in enumerate(values):
+                if col == 5:
+                    combo = QComboBox()
+                    combo.addItems(["ellipse", "rectangle"])
+                    _set_combo(combo, str(section.get("shape", "ellipse")).lower())
+                    combo.currentTextChanged.connect(lambda *_args: self._on_section_table_changed(None))
+                    self.section_table.setCellWidget(row, col, combo)
+                else:
+                    text = f"{value:.4f}" if isinstance(value, float) else str(value)
+                    self.section_table.setItem(row, col, QTableWidgetItem(text))
+        self.section_table.blockSignals(False)
+
+    def _sync_body_sections(self):
+        body = self._selected_body()
+        if body is None or not hasattr(self, "section_table"):
+            return
+        sections = []
+        for row in range(self.section_table.rowCount()):
+            try:
+                shape = _table_combo_or_text(self.section_table, row, 5, "ellipse").strip().lower()
+                if shape not in ("ellipse", "rectangle"):
+                    shape = "ellipse"
+                sections.append(
+                    {
+                        "x_m": max(0.0, float(_table_text(self.section_table, row, 0, "0"))),
+                        "width_m": max(0.0, float(_table_text(self.section_table, row, 1, "0"))),
+                        "height_m": max(0.0, float(_table_text(self.section_table, row, 2, "0"))),
+                        "centroid_y_m": float(_table_text(self.section_table, row, 3, "0")),
+                        "centroid_z_m": float(_table_text(self.section_table, row, 4, "0")),
+                        "shape": shape,
+                    }
+                )
+            except ValueError:
+                continue
+        sections.sort(key=lambda item: item["x_m"])
+        env = body.envelope or BodyEnvelope()
+        env.cross_sections = sections
+        if sections:
+            env.length_m = max(env.length_m, max(s["x_m"] for s in sections))
+            env.max_width_m = max(s["width_m"] for s in sections)
+            env.max_height_m = max(s["height_m"] for s in sections)
+        body.envelope = env
+
+    def _on_section_table_changed(self, _item):
+        self._sync_body_sections()
+        self._update_body_table_row(self.table.currentRow())
+        self._update_preview()
+
+    def _update_body_table_row(self, row: int):
+        if not (0 <= row < len(self.project.aircraft.bodies)):
+            return
+        body = self.project.aircraft.bodies[row]
+        env = body.envelope or BodyEnvelope()
+        self.table.blockSignals(True)
+        for col, value in ((7, env.length_m), (8, env.max_width_m), (9, env.max_height_m)):
+            self.table.setItem(row, col, QTableWidgetItem(f"{value:.3f}"))
+        self.table.blockSignals(False)
+
+    def _add_body_section(self):
+        body = self._selected_body()
+        if body is None:
+            return
+        self._sync_body_sections()
+        env = body.envelope or BodyEnvelope()
+        sections = list(env.cross_sections)
+        if sections:
+            xs = [float(s.get("x_m", 0.0)) for s in sections]
+            new_x = 0.5 * (min(xs) + max(xs))
+            width = max(float(s.get("width_m", 0.0)) for s in sections)
+            height = max(float(s.get("height_m", 0.0)) for s in sections)
+        else:
+            new_x = 0.5 * env.length_m
+            width = env.max_width_m
+            height = env.max_height_m
+        sections.append({"x_m": new_x, "width_m": width, "height_m": height, "centroid_y_m": 0.0, "centroid_z_m": 0.0, "shape": "ellipse"})
+        env.cross_sections = sections
+        body.envelope = env
+        self._load_body_sections()
+        self._update_preview()
+
+    def _remove_body_section(self):
+        body = self._selected_body()
+        row = self.section_table.currentRow() if hasattr(self, "section_table") else -1
+        if body is None or row < 0:
+            return
+        self._sync_body_sections()
+        env = body.envelope or BodyEnvelope()
+        if 0 <= row < len(env.cross_sections):
+            env.cross_sections.pop(row)
+            body.envelope = env
+        self._load_body_sections()
+        self._update_preview()
+
+    def _reset_body_sections(self):
+        body = self._selected_body()
+        if body is None:
+            return
+        env = body.envelope or BodyEnvelope()
+        env.cross_sections = []
+        body.envelope = env
+        self._ensure_default_sections(body)
+        self._load_body_sections()
+        self._update_preview()
+
+    def _analyze_bodies(self):
+        self._write_table()
+        results = analyze_bodies(self.project.aircraft)
+        self.project.aircraft.analyses.results["body_analysis"] = [result.as_dict() for result in results]
+        self._refresh_body_results()
+
+    def _refresh_body_results(self):
+        results = self.project.aircraft.analyses.results.get("body_analysis", [])
+        self.body_results_table.setRowCount(len(results))
+        for row, result in enumerate(results):
+            values = [
+                result.get("body_uid", ""),
+                _fmt(result.get("wetted_area_estimate_m2")),
+                _fmt(result.get("frontal_area_m2")),
+                _fmt(result.get("drag_area_estimate_m2")),
+                _fmt(result.get("payload_bay_volume_m3")),
+                "; ".join(result.get("warnings", [])),
+            ]
+            for col, value in enumerate(values):
+                self.body_results_table.setItem(row, col, QTableWidgetItem(str(value)))
+
+    def _update_preview(self):
+        if not hasattr(self, "preview_figure") or self.project is None:
+            return
+        self.preview_figure.clear()
+        ax = self.preview_figure.add_subplot(111, projection="3d")
+        all_points = []
+
+        for body in self.project.aircraft.bodies:
+            pts = self._plot_body_preview(ax, body)
+            all_points.extend(pts)
+
+        if self.show_aero_surfaces_check.isChecked():
+            for idx, surface in enumerate(self.project.aircraft.surfaces):
+                if not getattr(surface, "active", True):
+                    continue
+                pts = self._plot_surface_preview(ax, surface, idx)
+                all_points.extend(pts)
+
+        cg = getattr(self.project.aircraft.reference, "cg_m", None)
+        if cg:
+            ax.scatter([cg[0]], [cg[1]], [cg[2]], marker="o", s=45, c="white", edgecolors="black", label="CG")
+            all_points.append(tuple(cg))
+
+        ax.set_xlabel("X [m]")
+        ax.set_ylabel("Y [m]")
+        ax.set_zlabel("Z [m]")
+        ax.set_title("Aircraft Body Preview")
+        ax.view_init(elev=24, azim=-55)
+        self._set_preview_axes_equal(ax, all_points)
+        if all_points:
+            ax.legend(fontsize="small", loc="best")
+        self.preview_figure.tight_layout()
+        self.preview_canvas.draw_idle()
+
+    def _plot_body_preview(self, ax, body: BodyObject) -> List[tuple]:
+        env = body.envelope or BodyEnvelope()
+        if env.length_m <= 0.0 or env.max_width_m <= 0.0 or env.max_height_m <= 0.0:
+            return []
+        try:
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+        except Exception:
+            Poly3DCollection = None
+        sections = self._body_preview_sections(body)
+        if len(sections) < 2:
+            return []
+        rings = [self._body_section_ring(body, section, samples=20) for section in sections]
+        pts = [point for ring in rings for point in ring]
+        faces = []
+        for i in range(len(rings) - 1):
+            ring_a = rings[i]
+            ring_b = rings[i + 1]
+            count = min(len(ring_a), len(ring_b))
+            for j in range(count):
+                faces.append([
+                    ring_a[j],
+                    ring_a[(j + 1) % count],
+                    ring_b[(j + 1) % count],
+                    ring_b[j],
+                ])
+        faces.append(list(reversed(rings[0])))
+        faces.append(rings[-1])
+        color = "#8c564b" if body.active else "#999999"
+        alpha = 0.24 if body.active else 0.08
+        if Poly3DCollection is not None:
+            collection = Poly3DCollection(faces, facecolors=color, edgecolors="#333333", linewidths=0.8, alpha=alpha)
+            ax.add_collection3d(collection)
+        for ring in rings:
+            closed = ring + [ring[0]]
+            ax.plot([p[0] for p in closed], [p[1] for p in closed], [p[2] for p in closed], color="#333333", linewidth=0.7)
+        for j in range(0, len(rings[0]), max(1, len(rings[0]) // 4)):
+            line = [ring[j] for ring in rings]
+            ax.plot([p[0] for p in line], [p[1] for p in line], [p[2] for p in line], color="#333333", linewidth=0.55, alpha=0.75)
+        ax.plot([], [], [], color=color, linewidth=4, alpha=0.75, label=body.name)
+        return pts
+
+    def _body_preview_sections(self, body: BodyObject) -> List[dict]:
+        env = body.envelope or BodyEnvelope()
+        sections = sorted(list(env.cross_sections or []), key=lambda s: float(s.get("x_m", 0.0)))
+        if len(sections) >= 2:
+            return sections
+        return [
+            {"x_m": 0.0, "width_m": 0.15 * env.max_width_m, "height_m": 0.15 * env.max_height_m, "centroid_y_m": 0.0, "centroid_z_m": 0.0, "shape": "ellipse"},
+            {"x_m": 0.2 * env.length_m, "width_m": env.max_width_m, "height_m": env.max_height_m, "centroid_y_m": 0.0, "centroid_z_m": 0.0, "shape": "ellipse"},
+            {"x_m": 0.8 * env.length_m, "width_m": env.max_width_m, "height_m": env.max_height_m, "centroid_y_m": 0.0, "centroid_z_m": 0.0, "shape": "ellipse"},
+            {"x_m": env.length_m, "width_m": 0.15 * env.max_width_m, "height_m": 0.15 * env.max_height_m, "centroid_y_m": 0.0, "centroid_z_m": 0.0, "shape": "ellipse"},
+        ]
+
+    def _body_section_ring(self, body: BodyObject, section: dict, samples: int = 20) -> List[tuple]:
+        x0, y0, z0 = body.transform.origin_m
+        x = x0 + float(section.get("x_m", 0.0))
+        cy = y0 + float(section.get("centroid_y_m", 0.0))
+        cz = z0 + float(section.get("centroid_z_m", 0.0))
+        width = max(0.0, float(section.get("width_m", 0.0)))
+        height = max(0.0, float(section.get("height_m", 0.0)))
+        shape = str(section.get("shape", "ellipse")).lower()
+        if shape == "rectangle":
+            corners = [
+                (x, cy + 0.5 * width, cz + 0.5 * height),
+                (x, cy - 0.5 * width, cz + 0.5 * height),
+                (x, cy - 0.5 * width, cz - 0.5 * height),
+                (x, cy + 0.5 * width, cz - 0.5 * height),
+            ]
+            ring = []
+            for idx in range(samples):
+                t = idx / samples * 4.0
+                corner_idx = int(t) % 4
+                frac = t - int(t)
+                a = corners[corner_idx]
+                b = corners[(corner_idx + 1) % 4]
+                ring.append(tuple(a[k] + frac * (b[k] - a[k]) for k in range(3)))
+            return ring
+        ring = []
+        for idx in range(samples):
+            theta = 2.0 * math.pi * idx / samples
+            ring.append((x, cy + 0.5 * width * math.cos(theta), cz + 0.5 * height * math.sin(theta)))
+        return ring
+
+    def _plot_surface_preview(self, ax, surface: LiftingSurface, index: int) -> List[tuple]:
+        colors = ["#1f77b4", "#2ca02c", "#9467bd", "#ff7f0e", "#17becf", "#d62728"]
+        color = colors[index % len(colors)]
+        polygons = self._surface_preview_airfoil_polygons(surface)
+        all_pts = []
+        try:
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+        except Exception:
+            Poly3DCollection = None
+        if Poly3DCollection is not None and polygons:
+            ax.add_collection3d(Poly3DCollection(polygons, facecolors=color, edgecolors=color, linewidths=0.35, alpha=0.2))
+        for idx, polygon in enumerate(polygons):
+            all_pts.extend(polygon)
+            if idx % max(1, len(polygons) // 30) == 0:
+                closed = polygon + [polygon[0]]
+                ax.plot([p[0] for p in closed], [p[1] for p in closed], [p[2] for p in closed], color=color, linewidth=0.45, alpha=0.75)
+        if polygons:
+            ax.plot([], [], [], color=color, linewidth=2, label=surface.name)
+        return all_pts
+
+    def _surface_preview_airfoil_polygons(self, surface: LiftingSurface) -> List[List[tuple]]:
+        sections = _surface_sections_for_plot(surface)
+        if len(sections) < 2:
+            return self._surface_preview_polygons(surface)
+        root_coords, tip_coords = self._surface_preview_airfoil_coords(surface, n_points=48)
+        if not root_coords or not tip_coords:
+            return self._surface_preview_polygons(surface)
+
+        axis = _value(surface.local_span_axis)
+        symmetry = _value(surface.symmetry)
+        side_signs = [1.0, -1.0] if symmetry == SymmetryMode.MIRRORED_ABOUT_XZ.value else [1.0]
+        if axis in (Axis.Z.value, Axis.NEG_Z.value):
+            y0 = surface.transform.origin_m[1]
+            if symmetry == SymmetryMode.MIRRORED_ABOUT_XZ.value and abs(y0) > 1e-9:
+                side_signs = [1.0, -1.0]
+            else:
+                side_signs = [1.0]
+
+        polygons: List[List[tuple]] = []
+        for side in side_signs:
+            rings = [
+                self._surface_preview_section_ring(surface, section, root_coords, tip_coords, side)
+                for section in sections
+            ]
+            count = min(len(ring) for ring in rings)
+            for i in range(len(rings) - 1):
+                for j in range(count):
+                    polygons.append([
+                        rings[i][j],
+                        rings[i][(j + 1) % count],
+                        rings[i + 1][(j + 1) % count],
+                        rings[i + 1][j],
+                    ])
+            polygons.append(list(reversed(rings[0][:count])))
+            polygons.append(rings[-1][:count])
+        return polygons
+
+    def _surface_preview_airfoil_coords(self, surface: LiftingSurface, n_points: int = 48):
+        try:
+            from core.naca_generator.naca456 import generate_naca_airfoil
+
+            def clean(name: str) -> str:
+                return str(name or "0012").lower().replace("naca", "").strip() or "0012"
+
+            xr, zr = generate_naca_airfoil(clean(surface.airfoils.root_airfoil), n_points=n_points)
+            xt, zt = generate_naca_airfoil(clean(surface.airfoils.tip_airfoil), n_points=n_points)
+            root = [(float(x), float(z)) for x, z in zip(xr, zr)]
+            tip = [(float(x), float(z)) for x, z in zip(xt, zt)]
+            n = min(len(root), len(tip))
+            return root[:n], tip[:n]
+        except Exception:
+            return [], []
+
+    def _surface_preview_section_ring(
+        self,
+        surface: LiftingSurface,
+        section: dict,
+        root_coords: List[tuple],
+        tip_coords: List[tuple],
+        side_sign: float,
+    ) -> List[tuple]:
+        x0, y0, z0 = surface.transform.origin_m
+        axis = _value(surface.local_span_axis)
+        eta = float(section["eta"])
+        chord = float(section["chord"])
+        x_le = x0 + float(section["x_le"])
+        twist = math.radians(float(section.get("twist_deg", 0.0)) + float(surface.incidence_deg))
+        cos_t = math.cos(twist)
+        sin_t = math.sin(twist)
+
+        coords = [
+            (
+                root_coords[i][0] * (1.0 - eta) + tip_coords[i][0] * eta,
+                root_coords[i][1] * (1.0 - eta) + tip_coords[i][1] * eta,
+            )
+            for i in range(min(len(root_coords), len(tip_coords)))
+        ]
+
+        ring = []
+        if axis in (Axis.Z.value, Axis.NEG_Z.value):
+            z_dir = -1.0 if axis == Axis.NEG_Z.value else 1.0
+            y_station = y0
+            if _value(surface.symmetry) == SymmetryMode.MIRRORED_ABOUT_XZ.value and abs(y0) > 1e-9:
+                y_station = side_sign * abs(y0)
+            z_span = z0 + z_dir * float(section["y"])
+            for x_af, z_af in coords:
+                local_x = x_af * chord
+                local_y = z_af * chord
+                x_twisted = local_x * cos_t
+                y_twisted = local_x * sin_t + local_y
+                ring.append((x_le + x_twisted, y_station + y_twisted, z_span))
+            return ring
+
+        axis_sign = -1.0 if axis == Axis.NEG_Y.value else 1.0
+        y_span = y0 + side_sign * axis_sign * float(section["y"])
+        z_base = z0 + math.tan(math.radians(surface.planform.dihedral_deg)) * float(section["y"])
+        for x_af, z_af in coords:
+            local_x = x_af * chord
+            local_z = z_af * chord
+            x_twisted = local_x * cos_t + local_z * sin_t
+            z_twisted = -local_x * sin_t + local_z * cos_t
+            ring.append((x_le + x_twisted, y_span, z_base + z_twisted))
+        return ring
+
+    def _surface_preview_polygons(self, surface: LiftingSurface) -> List[List[tuple]]:
+        plan = surface.planform
+        x0, y0, z0 = surface.transform.origin_m
+        axis = _value(surface.local_span_axis)
+        symmetry = _value(surface.symmetry)
+        sections = _surface_sections_for_plot(surface)
+        root = sections[0]
+        tip = sections[-1]
+        polygons = []
+
+        if axis in (Axis.Z.value, Axis.NEG_Z.value):
+            z_dir = -1.0 if axis == Axis.NEG_Z.value else 1.0
+            span = abs(tip["y"])
+            y_values = [y0]
+            if symmetry == SymmetryMode.MIRRORED_ABOUT_XZ.value and abs(y0) > 1e-9:
+                y_values = [abs(y0), -abs(y0)]
+            for y_station in y_values:
+                z_tip = z0 + z_dir * span
+                x_tip_le = x0 + tip["x_le"]
+                polygons.append([
+                    (x0, y_station, z0),
+                    (x0 + root["chord"], y_station, z0),
+                    (x_tip_le + tip["chord"], y_station, z_tip),
+                    (x_tip_le, y_station, z_tip),
+                ])
+            return polygons
+
+        axis_sign = -1.0 if axis == Axis.NEG_Y.value else 1.0
+        side_signs = [1.0, -1.0] if symmetry == SymmetryMode.MIRRORED_ABOUT_XZ.value else [1.0]
+        for side in side_signs:
+            signed_span = side * axis_sign * abs(tip["y"])
+            z_tip = z0 + math.tan(math.radians(plan.dihedral_deg)) * abs(tip["y"])
+            x_tip_le = x0 + tip["x_le"]
+            polygons.append([
+                (x0, y0, z0),
+                (x0 + root["chord"], y0, z0),
+                (x_tip_le + tip["chord"], y0 + signed_span, z_tip),
+                (x_tip_le, y0 + signed_span, z_tip),
+            ])
+        return polygons
+
+    def _set_preview_axes_equal(self, ax, points: List[tuple]) -> None:
+        if not points:
+            ax.set_xlim(-0.5, 1.0)
+            ax.set_ylim(-0.5, 0.5)
+            ax.set_zlim(-0.25, 0.25)
+            return
+        arr = np.asarray(points, dtype=float)
+        mins = arr.min(axis=0)
+        maxs = arr.max(axis=0)
+        center = 0.5 * (mins + maxs)
+        radius = max(float(np.max(maxs - mins)) * 0.55, 0.1)
+        ax.set_xlim(center[0] - radius, center[0] + radius)
+        ax.set_ylim(center[1] - radius, center[1] + radius)
+        ax.set_zlim(center[2] - radius, center[2] + radius)
+        try:
+            ax.set_box_aspect([1, 1, 1])
+        except Exception:
+            pass
 
 
 class MassCgTab(QWidget):
@@ -3339,6 +3674,116 @@ class MassCgTab(QWidget):
         self.mass_warning_label.setText("; ".join(balance.warnings) if balance.warnings else "-")
 
 
+class ReferenceTab(QWidget):
+    dataChanged = pyqtSignal()
+
+    def __init__(self, project: Project):
+        super().__init__()
+        self.project = project
+        self.inputs: Dict[str, QDoubleSpinBox] = {}
+        self._loading = False
+        self._build_ui()
+        self.update_from_project()
+
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+        form_group = QGroupBox("Aircraft Reference Quantities")
+        form = QFormLayout(form_group)
+        for key, label, default_max in (
+            ("reference_area_m2", "Reference area [m^2]", 1000.0),
+            ("reference_span_m", "Reference span [m]", 200.0),
+            ("reference_chord_m", "Reference chord [m]", 50.0),
+            ("cg_x", "CG X [m]", 100.0),
+            ("cg_y", "CG Y [m]", 100.0),
+            ("cg_z", "CG Z [m]", 100.0),
+            ("moment_x", "Moment ref X [m]", 100.0),
+            ("moment_y", "Moment ref Y [m]", 100.0),
+            ("moment_z", "Moment ref Z [m]", 100.0),
+        ):
+            spin = _double_spin(-default_max if key.endswith(("_x", "_y", "_z")) else 0.0, default_max, 0.01, 4)
+            spin.valueChanged.connect(lambda _value, k=key: self._on_value_changed(k))
+            self.inputs[key] = spin
+            form.addRow(label, spin)
+        root.addWidget(form_group)
+
+        row = QHBoxLayout()
+        from_main_btn = QPushButton("Set Reference From Main Wing")
+        from_main_btn.clicked.connect(self._set_from_main_wing)
+        row.addWidget(from_main_btn)
+        cg_to_moment_btn = QPushButton("Set Moment Reference To CG")
+        cg_to_moment_btn.clicked.connect(self._set_moment_ref_to_cg)
+        row.addWidget(cg_to_moment_btn)
+        row.addStretch()
+        root.addLayout(row)
+        root.addStretch()
+
+    def update_from_project(self):
+        if self.project is None:
+            return
+        ref = self.project.aircraft.reference
+        self._loading = True
+        values = {
+            "reference_area_m2": ref.reference_area_m2,
+            "reference_span_m": ref.reference_span_m,
+            "reference_chord_m": ref.reference_chord_m,
+            "cg_x": ref.cg_m[0],
+            "cg_y": ref.cg_m[1],
+            "cg_z": ref.cg_m[2],
+            "moment_x": ref.moment_reference_m[0],
+            "moment_y": ref.moment_reference_m[1],
+            "moment_z": ref.moment_reference_m[2],
+        }
+        for key, value in values.items():
+            self.inputs[key].setValue(float(value))
+        self._loading = False
+
+    def sync_to_project(self):
+        self._write_reference()
+
+    def _on_value_changed(self, _key: str):
+        if self._loading:
+            return
+        self._write_reference()
+        self.dataChanged.emit()
+
+    def _write_reference(self):
+        ref = self.project.aircraft.reference
+        ref.reference_area_m2 = float(self.inputs["reference_area_m2"].value())
+        ref.reference_span_m = float(self.inputs["reference_span_m"].value())
+        ref.reference_chord_m = float(self.inputs["reference_chord_m"].value())
+        ref.cg_m = (
+            float(self.inputs["cg_x"].value()),
+            float(self.inputs["cg_y"].value()),
+            float(self.inputs["cg_z"].value()),
+        )
+        ref.moment_reference_m = (
+            float(self.inputs["moment_x"].value()),
+            float(self.inputs["moment_y"].value()),
+            float(self.inputs["moment_z"].value()),
+        )
+
+    def _set_from_main_wing(self):
+        surface = None
+        for candidate in self.project.aircraft.surfaces:
+            if candidate.uid == "main_wing" or _value(candidate.role) == SurfaceRole.MAIN_WING.value:
+                surface = candidate
+                break
+        if surface is None:
+            return
+        plan = surface.planform
+        ref = self.project.aircraft.reference
+        ref.reference_area_m2 = plan.actual_area()
+        ref.reference_span_m = plan.actual_span()
+        ref.reference_chord_m = plan.mean_aerodynamic_chord()
+        self.update_from_project()
+        self.dataChanged.emit()
+
+    def _set_moment_ref_to_cg(self):
+        self.project.aircraft.reference.moment_reference_m = self.project.aircraft.reference.cg_m
+        self.update_from_project()
+        self.dataChanged.emit()
+
+
 # --- Main Geometry Tab ---
 class GeometryTab(QTabWidget):
     def __init__(self, project: Project):
@@ -3347,9 +3792,12 @@ class GeometryTab(QTabWidget):
         self.lifting_surfaces_tab = LiftingSurfacesTab(project)
         self.fuselage_tab = FuselageTab(project)
         self.mass_cg_tab = MassCgTab(project)
+        self.reference_tab = ReferenceTab(project)
         self.mass_cg_tab.dataChanged.connect(self._on_geometry_data_changed)
+        self.reference_tab.dataChanged.connect(self._on_geometry_data_changed)
         self.addTab(self.lifting_surfaces_tab, "Lifting Surfaces")
         self.addTab(self.mass_cg_tab, "Mass / CG")
+        self.addTab(self.reference_tab, "Reference")
         self.addTab(self.fuselage_tab, "Fuselage / Bodies")
 
     def _on_geometry_data_changed(self):
@@ -3369,7 +3817,7 @@ class GeometryTab(QTabWidget):
         self.project.sync_aircraft_main_wing_to_legacy()
 
     def _tabs(self):
-        return (self.lifting_surfaces_tab, self.mass_cg_tab, self.fuselage_tab)
+        return (self.lifting_surfaces_tab, self.mass_cg_tab, self.reference_tab, self.fuselage_tab)
 
 
 def _double_spin(min_value: float, max_value: float, step: float, decimals: int) -> QDoubleSpinBox:
@@ -3422,6 +3870,13 @@ def _set_combo_by_data(combo: QComboBox, value: str) -> None:
 def _table_text(table: QTableWidget, row: int, col: int, default) -> str:
     item = table.item(row, col)
     return item.text().strip() if item and item.text().strip() else str(default)
+
+
+def _table_combo_or_text(table: QTableWidget, row: int, col: int, default) -> str:
+    widget = table.cellWidget(row, col)
+    if isinstance(widget, QComboBox):
+        return widget.currentText().strip()
+    return _table_text(table, row, col, default)
 
 
 def _uid_from_name(name: str, row: int) -> str:

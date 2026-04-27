@@ -20,6 +20,7 @@ from core.state import Project
 from core.structures import StructuralElement, StructuralElementType, StructuralLocation, StructuralSection
 from services.aircraft import MultiSurfaceAeroService, analyze_conceptual_structure, compute_mass_balance
 from services.aircraft.body import analyze_bodies
+from services.aircraft.truss import TrussGenerationSettings, generate_body_truss
 from services.cpacs import CPACSAdapter, OptionalTiGLService
 from services.geometry import AeroSandboxService
 
@@ -197,6 +198,26 @@ class AircraftPhaseExitCriteriaTests(unittest.TestCase):
         self.assertGreater(results[0].wetted_area_estimate_m2, 0.0)
         self.assertGreater(results[0].payload_bay_volume_m3 or 0.0, 0.0)
         self.assertTrue(any("Fuselage aero" in w for w in results[0].warnings))
+
+    def test_body_truss_generation_uses_aircraft_body_state(self):
+        aircraft = conventional_rc_aircraft_preset()
+        aircraft.bodies.append(
+            BodyObject(
+                uid="fuselage",
+                name="Fuselage",
+                role="fuselage",
+                envelope=BodyEnvelope(length_m=1.0, max_width_m=0.16, max_height_m=0.18),
+            )
+        )
+        result = generate_body_truss(
+            aircraft,
+            TrussGenerationSettings(body_uid="fuselage", truss_type="Warren Truss", num_bays=4, inward_offset_m=0.005),
+        )
+        self.assertEqual(result.body_uid, "fuselage")
+        self.assertEqual(len(result.vertices_m), 20)
+        self.assertGreater(len(result.members), 0)
+        self.assertGreater(result.total_member_length_m, 1.0)
+        self.assertIn("truss_framework", aircraft.analyses.results)
 
 
 if __name__ == "__main__":

@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
         self.tab_structure = StructureTab(self.project)
         self.tab_export = ExportTab(self.project)
         self.tab_analysis.twist_tab.dataChanged.connect(self._on_project_data_changed)
+        self.tab_export.dataChanged.connect(self.refresh_tabs)
         
         self.tabs.addTab(self.tab_geometry, "Geometry")
         self.tabs.addTab(self.tab_analysis, "Analysis")

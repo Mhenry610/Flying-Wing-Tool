@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -52,10 +53,12 @@ class MissionTab(QTabWidget):
         self.sweep_tab = self._create_sweep_tab()
         self.batch_tab = self._create_batch_tab()
         self.mission_tab = self._create_mission_tab()
+        self.propulsion_tab = self._create_propulsion_tab()
 
         self.addTab(self.sweep_tab, "Sweep")
         self.addTab(self.batch_tab, "Batch")
         self.addTab(self.mission_tab, "Mission")
+        self.addTab(self.propulsion_tab, "Propulsion Systems")
 
     def _create_sweep_tab(self) -> QWidget:
         widget = QWidget()
@@ -458,6 +461,27 @@ class MissionTab(QTabWidget):
 
         layout.addLayout(res_layout)
 
+        return widget
+
+    def _create_propulsion_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        controls = QHBoxLayout()
+        sync_btn = QPushButton("Sync From Mission Controls")
+        sync_btn.clicked.connect(self._sync_propulsion_systems_to_aircraft)
+        controls.addWidget(sync_btn)
+        remove_btn = QPushButton("Remove Selected")
+        remove_btn.clicked.connect(self._remove_propulsion_system)
+        controls.addWidget(remove_btn)
+        controls.addStretch()
+        layout.addLayout(controls)
+
+        self.propulsion_table = QTableWidget(0, 8)
+        self.propulsion_table.setHorizontalHeaderLabels([
+            "UID", "Name", "Motors", "Motor KV", "Battery", "Prop", "APC file", "Matched"
+        ])
+        self.propulsion_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.propulsion_table)
         return widget
 
     def _create_mass_tab(self) -> QWidget:
@@ -1769,6 +1793,89 @@ class MissionTab(QTabWidget):
         self.mass_cg_label.setText(f"({balance.cg_m[0]:.4f}, {balance.cg_m[1]:.4f}, {balance.cg_m[2]:.4f})")
         self.mass_warning_label.setText("; ".join(balance.warnings) if balance.warnings else "-")
 
+    def _battery_nominal_voltage(self) -> float:
+        chem = self.batt_chem.currentText()
+        cell_v = 3.7
+        if "LiIon" in chem:
+            cell_v = 3.6
+        elif "LiFePO4" in chem:
+            cell_v = 3.2
+        return float(self.batt_series.value()) * cell_v
+
+    def _mission_propulsion_snapshot(self) -> Dict[str, Any]:
+        return {
+            "uid": "mission_propulsion",
+            "name": "Mission propulsion",
+            "source": "mission_gui",
+            "motor_count": int(self.motor_count.value()),
+            "motor": {
+                "kv_rpm_per_v": float(self.motor_kv.value()),
+                "ri_mohm": float(self.motor_ri_mohm.value()),
+                "io_a": float(self.motor_io.value()),
+                "v_at_io": float(self.motor_vio.value()),
+            },
+            "battery": {
+                "chemistry": self.batt_chem.currentText(),
+                "series": int(self.batt_series.value()),
+                "parallel": int(self.batt_parallel.value()),
+                "capacity_mAh": float(self.batt_capacity_mAh.value()),
+                "c_rating": float(self.batt_c_rating.value()),
+                "nominal_voltage_v": self._battery_nominal_voltage(),
+            },
+            "propeller": {
+                "diameter_in": float(self.prop_diam_in.value()),
+                "pitch_in": float(self.prop_pitch_in.value()),
+                "family": self.prop_family.currentText(),
+                "apc_file_path": self.m_prop_file_path,
+            },
+            "matching": {
+                "source": "APC map" if self.m_prop_file_path else "parametric",
+                "matched": bool(self.m_prop_file_path or self.prop_family.currentText()),
+            },
+        }
+
+    def _sync_propulsion_systems_to_aircraft(self):
+        if self.project is None:
+            return
+        snapshot = self._mission_propulsion_snapshot()
+        systems = [s for s in self.project.aircraft.propulsion_systems if s.get("uid") != snapshot["uid"]]
+        systems.insert(0, snapshot)
+        self.project.aircraft.propulsion_systems = systems
+        self._refresh_propulsion_table()
+
+    def _refresh_propulsion_table(self):
+        if not hasattr(self, "propulsion_table") or self.project is None:
+            return
+        systems = self.project.aircraft.propulsion_systems
+        self.propulsion_table.setRowCount(len(systems))
+        for row, system in enumerate(systems):
+            motor = system.get("motor", {})
+            battery = system.get("battery", {})
+            prop = system.get("propeller", {})
+            matching = system.get("matching", {})
+            values = [
+                system.get("uid", ""),
+                system.get("name", ""),
+                system.get("motor_count", 1),
+                motor.get("kv_rpm_per_v", ""),
+                f"{battery.get('series', '-') }S{battery.get('parallel', '-') }P {battery.get('capacity_mAh', '-') } mAh",
+                f"{prop.get('diameter_in', '-') }x{prop.get('pitch_in', '-') } {prop.get('family', '')}",
+                Path(prop.get("apc_file_path", "")).name if prop.get("apc_file_path") else "",
+                "yes" if matching.get("matched") else "no",
+            ]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.propulsion_table.setItem(row, col, item)
+
+    def _remove_propulsion_system(self):
+        if self.project is None or not hasattr(self, "propulsion_table"):
+            return
+        row = self.propulsion_table.currentRow()
+        if 0 <= row < len(self.project.aircraft.propulsion_systems):
+            self.project.aircraft.propulsion_systems.pop(row)
+            self._refresh_propulsion_table()
+
     def update_from_project(self):
         if self.project is None:
             return
@@ -1795,11 +1902,13 @@ class MissionTab(QTabWidget):
                 self.m_summary.setText(summary_text)
 
             self._populate_phase_stats_table(phases)
+        self._refresh_propulsion_table()
 
     def sync_to_project(self):
         if self.project is None:
             return
         self._sync_mass_table()
+        self._sync_propulsion_systems_to_aircraft()
         self.project.mission.gui_settings = self._collect_gui_settings()
 
     def _collect_gui_settings(self) -> Dict[str, Any]:
