@@ -24,7 +24,7 @@ def conventional_rc_aircraft_preset(name: str = "Conventional RC Aircraft") -> A
         local_span_axis=Axis.Y,
         planform=PlanformGeometry(wing_area_m2=0.16, aspect_ratio=4.0, taper_ratio=0.8, sweep_le_deg=0.0),
         control_surfaces=[ControlSurface("Elevator", "Elevator", 0.0, 100.0, 70.0, 70.0)],
-        analysis_settings=SurfaceAnalysisSettings(cl_alpha_per_deg=0.075, zero_lift_aoa_deg=0.0, cm0=0.0, cd0=0.015, cl_max=1.1),
+        analysis_settings=SurfaceAnalysisSettings(cl_alpha_per_deg=0.075, zero_lift_aoa_deg=0.0, cm0=0.0, cd0=0.015, cl_max=1.1, trim_lift_direction="negative"),
     )
     htail.planform.control_surfaces = list(htail.control_surfaces)
 
@@ -61,7 +61,7 @@ def canard_rc_aircraft_preset(name: str = "Canard RC Aircraft") -> AircraftProje
         local_span_axis=Axis.Y,
         planform=PlanformGeometry(wing_area_m2=0.12, aspect_ratio=4.2, taper_ratio=0.8),
         control_surfaces=[ControlSurface("Canard Elevator", "Elevator", 0.0, 100.0, 70.0, 70.0)],
-        analysis_settings=SurfaceAnalysisSettings(cl_alpha_per_deg=0.075, zero_lift_aoa_deg=0.0, cm0=0.0, cd0=0.015, cl_max=1.05),
+        analysis_settings=SurfaceAnalysisSettings(cl_alpha_per_deg=0.075, zero_lift_aoa_deg=0.0, cm0=0.0, cd0=0.015, cl_max=1.05, trim_lift_direction="positive"),
     )
     canard.planform.control_surfaces = list(canard.control_surfaces)
     project.surfaces.append(canard)

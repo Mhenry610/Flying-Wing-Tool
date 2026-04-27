@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Dict, List, Tuple, Optional
 import numpy as np
 
@@ -18,6 +19,7 @@ from PyQt6.QtWidgets import (
 from core.aircraft import (
     BodyEnvelope,
     BodyObject,
+    MassItem,
     canard_rc_aircraft_preset,
     conventional_rc_aircraft_preset,
     twin_fin_rc_aircraft_preset,
@@ -28,6 +30,7 @@ from core.state import Project
 from core.models.planform import PlanformGeometry, BodySection, ControlSurface
 from core.models.twist_trim import TwistTrimParameters
 from services.geometry import AeroSandboxService, SpanwiseSection
+from services.aircraft import MultiSurfaceAeroService, apply_mass_balance_to_reference, compute_mass_balance
 
 # --- Planform Tab ---
 class PlanformTab(QWidget):
@@ -682,6 +685,12 @@ class TwistTrimTab(QWidget):
         scroll.setWidgetResizable(True)
         content = QWidget()
         form = QFormLayout(content)
+
+        self.target_surface_combo = QComboBox()
+        self.target_surface_combo.currentIndexChanged.connect(self._on_target_surface_changed)
+        form.addRow("Selected-surface analysis target", self.target_surface_combo)
+        self.surface_scope_label = QLabel("Legacy selected-surface AeroSandbox path")
+        form.addRow("Scope", self.surface_scope_label)
         
         self._add_spin(form, "gross_takeoff_weight_kg", "GTW [kg]", 0.1, 500.0, 0.5)
         self._add_spin(form, "cruise_altitude_m", "Cruise Alt [m]", 0.0, 20000.0, 100.0)
@@ -706,6 +715,28 @@ class TwistTrimTab(QWidget):
         self._add_spin(form, "static_margin_percent", "Static Margin %", -5.0, 30.0, 0.5)
         self._add_spin(form, "estimated_cl_max", "Est Cl max", 0.1, 5.0, 0.05)
         self._add_spin(form, "estimated_cl_max_speed", "Est Cl @ Vmax", 0.05, 3.0, 0.05)
+
+        form.addRow(QLabel("<b>Aircraft Analysis</b>"))
+        self.aircraft_alpha_spin = _double_spin(-20.0, 30.0, 0.5, 2)
+        self.aircraft_alpha_spin.setValue(4.0)
+        self.aircraft_beta_spin = _double_spin(-20.0, 20.0, 0.5, 2)
+        self.aircraft_speed_spin = _double_spin(0.1, 120.0, 1.0, 2)
+        self.aircraft_speed_spin.setValue(20.0)
+        self.aircraft_rho_spin = _double_spin(0.1, 2.0, 0.01, 4)
+        self.aircraft_rho_spin.setValue(1.225)
+        form.addRow("Alpha [deg]", self.aircraft_alpha_spin)
+        form.addRow("Beta [deg]", self.aircraft_beta_spin)
+        form.addRow("Airspeed [m/s]", self.aircraft_speed_spin)
+        form.addRow("Density [kg/m^3]", self.aircraft_rho_spin)
+        for key, label in (
+            ("aircraft_cl", "Aircraft CL"),
+            ("aircraft_cd", "Aircraft CD"),
+            ("aircraft_cm", "Aircraft Cm"),
+            ("trim_alpha", "Trim alpha [deg]"),
+            ("static_margin", "Static margin [%]"),
+        ):
+            self.result_labels[key] = QLabel("-")
+            form.addRow(label, self.result_labels[key])
         
         scroll.setWidget(content)
         h_layout.addWidget(scroll, 1)
@@ -716,17 +747,24 @@ class TwistTrimTab(QWidget):
         
         # Actions
         btn_row = QHBoxLayout()
-        est_btn = QPushButton("Estimate from Airfoils")
+        self.legacy_scope_label = QLabel("Legacy wing-only AeroSandbox path: main wing / project.wing")
+        btn_row.addWidget(self.legacy_scope_label)
+
+        est_btn = QPushButton("Estimate Main-Wing Airfoil Params")
         est_btn.clicked.connect(self._on_estimate)
         btn_row.addWidget(est_btn)
         
-        opt_btn = QPushButton("Optimize Twist")
+        opt_btn = QPushButton("Optimize Selected-Surface Twist")
         opt_btn.clicked.connect(self._on_optimize_twist)
         btn_row.addWidget(opt_btn)
         
-        analyze_btn = QPushButton("Run Analysis")
+        analyze_btn = QPushButton("Run Selected-Surface Analysis")
         analyze_btn.clicked.connect(self._on_analyze)
         btn_row.addWidget(analyze_btn)
+
+        aircraft_btn = QPushButton("Run Whole-Aircraft Analysis")
+        aircraft_btn.clicked.connect(self._on_aircraft_analyze)
+        btn_row.addWidget(aircraft_btn)
         
         viz_btn = QPushButton("Visualize 3D Flow")
         viz_btn.clicked.connect(self._on_visualize_flow)
@@ -734,6 +772,19 @@ class TwistTrimTab(QWidget):
         
         btn_row.addStretch()
         main_layout.addLayout(btn_row)
+
+        aircraft_group = QGroupBox("Aircraft Surface Contributions")
+        aircraft_layout = QVBoxLayout(aircraft_group)
+        self.aircraft_scope_label = QLabel("Whole-aircraft conceptual analysis: all active surfaces with Include in aircraft aero enabled")
+        aircraft_layout.addWidget(self.aircraft_scope_label)
+        self.aircraft_active_surfaces_label = QLabel("-")
+        aircraft_layout.addWidget(self.aircraft_active_surfaces_label)
+        self.aircraft_contrib_table = QTableWidget()
+        self.aircraft_contrib_table.setColumnCount(7)
+        self.aircraft_contrib_table.setHorizontalHeaderLabels(["Surface", "Instance", "CL", "CD", "CM", "Fx [N]", "Fz [N]"])
+        self.aircraft_contrib_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        aircraft_layout.addWidget(self.aircraft_contrib_table)
+        main_layout.addWidget(aircraft_group)
 
     def _add_spin(self, form: QFormLayout, key: str, label: str, min_val: float, max_val: float, step: float, decimals: int = 2):
         spin = QDoubleSpinBox()
@@ -747,11 +798,15 @@ class TwistTrimTab(QWidget):
     def _on_value_changed(self, key: str, value: float) -> None:
         if self._loading: return
         setattr(self.project.wing.twist_trim, key, float(value))
+        self._sync_target_surface_from_controls()
         self._update_plots()
 
     def _on_dist_changed(self, text: str) -> None:
         if self._loading: return
         self.project.wing.twist_trim.lift_distribution = text.lower()
+        surface = self._target_surface()
+        if surface is not None:
+            surface.analysis_settings.lift_distribution = text.lower()
         self._update_plots()
 
     def _on_structural_spanload_changed(self, text: str) -> None:
@@ -760,6 +815,90 @@ class TwistTrimTab(QWidget):
             self.project.wing.twist_trim.structural_spanload_model = "blind_hybrid_bwb_body"
         else:
             self.project.wing.twist_trim.structural_spanload_model = "vlm"
+
+    def _analysis_target_surfaces(self) -> List[LiftingSurface]:
+        return [
+            surface for surface in self.project.aircraft.surfaces
+            if _value(surface.local_span_axis) not in (Axis.Z.value, Axis.NEG_Z.value)
+        ] or list(self.project.aircraft.surfaces)
+
+    def _target_surface(self) -> Optional[LiftingSurface]:
+        uid = self.target_surface_combo.currentData() if hasattr(self, "target_surface_combo") else None
+        for surface in self.project.aircraft.surfaces:
+            if surface.uid == uid:
+                return surface
+        targets = self._analysis_target_surfaces()
+        return targets[0] if targets else None
+
+    def _on_target_surface_changed(self, *_args):
+        if self._loading:
+            return
+        surface = self._target_surface()
+        if surface is None:
+            return
+        self._remember_analysis_target(surface.uid)
+        self._load_target_surface_settings(surface)
+        self._update_plots()
+
+    def _remember_analysis_target(self, uid: str) -> None:
+        settings = getattr(self.project.analysis, "gui_settings", None)
+        if settings is None:
+            self.project.analysis.gui_settings = {}
+            settings = self.project.analysis.gui_settings
+        settings["selected_twist_trim_surface_uid"] = uid
+
+    def _load_target_surface_settings(self, surface: LiftingSurface) -> None:
+        self._loading = True
+        settings = surface.analysis_settings
+        for key, value in (
+            ("cm0_root", settings.cm0),
+            ("cm0_tip", settings.cm0),
+            ("zero_lift_aoa_root_deg", settings.zero_lift_aoa_deg),
+            ("zero_lift_aoa_tip_deg", settings.zero_lift_aoa_deg),
+            ("cl_alpha_root_per_deg", settings.cl_alpha_per_deg),
+            ("cl_alpha_tip_per_deg", settings.cl_alpha_per_deg),
+            ("design_cl", settings.design_cl),
+            ("estimated_cl_max", settings.cl_max),
+        ):
+            spin = self.inputs.get(key)
+            if spin is not None:
+                spin.setValue(float(value))
+                setattr(self.project.wing.twist_trim, key, float(value))
+        _set_combo(self.distribution_box, "Elliptical" if settings.lift_distribution == "elliptical" else "Bell")
+        self.project.wing.twist_trim.lift_distribution = settings.lift_distribution
+        self._loading = False
+        self.surface_scope_label.setText(
+            f"Selected-surface AeroSandbox path: {surface.name} ({surface.uid})"
+        )
+
+    def _sync_target_surface_from_controls(self) -> None:
+        surface = self._target_surface()
+        if surface is None:
+            return
+        params = self.project.wing.twist_trim
+        surface.analysis_settings.cm0 = 0.5 * (params.cm0_root + params.cm0_tip)
+        surface.analysis_settings.zero_lift_aoa_deg = 0.5 * (params.zero_lift_aoa_root_deg + params.zero_lift_aoa_tip_deg)
+        surface.analysis_settings.cl_alpha_per_deg = 0.5 * (params.cl_alpha_root_per_deg + params.cl_alpha_tip_per_deg)
+        surface.analysis_settings.design_cl = params.design_cl
+        surface.analysis_settings.cl_max = params.estimated_cl_max
+        surface.analysis_settings.lift_distribution = params.lift_distribution
+
+    def _with_legacy_surface_context(self, surface: LiftingSurface):
+        saved = (
+            self.project.wing.name,
+            self.project.wing.planform,
+            self.project.wing.airfoil,
+            self.project.wing.optimized_twist_deg,
+        )
+        self._sync_target_surface_from_controls()
+        self.project.wing.name = surface.name
+        self.project.wing.planform = surface.planform
+        self.project.wing.airfoil = surface.airfoils
+        self.project.wing.optimized_twist_deg = list(surface.twist.twist_deg) if surface.twist.twist_deg else None
+        return saved
+
+    def _restore_legacy_surface_context(self, saved) -> None:
+        self.project.wing.name, self.project.wing.planform, self.project.wing.airfoil, self.project.wing.optimized_twist_deg = saved
 
     def sync_to_project(self) -> None:
         """Push all editable widgets into project state before saving."""
@@ -774,12 +913,20 @@ class TwistTrimTab(QWidget):
             if self.structural_spanload_box.currentText() == "Blind Hybrid BWB"
             else "vlm"
         )
+        self._sync_target_surface_from_controls()
+        surface = self._target_surface()
+        if surface is not None:
+            self._remember_analysis_target(surface.uid)
 
     def _on_estimate(self):
+        surface = self._target_surface()
+        if surface is None:
+            return
+        saved = self._with_legacy_surface_context(surface)
         service = AeroSandboxService(self.project)
         try:
-            root_airfoil = self.project.wing.airfoil.root_airfoil
-            tip_airfoil = self.project.wing.airfoil.tip_airfoil
+            root_airfoil = surface.airfoils.root_airfoil
+            tip_airfoil = surface.airfoils.tip_airfoil
             
             root_params = service.analyze_airfoil_parameters(root_airfoil)
             tip_params = service.analyze_airfoil_parameters(tip_airfoil)
@@ -790,26 +937,58 @@ class TwistTrimTab(QWidget):
             self.project.wing.twist_trim.zero_lift_aoa_tip_deg = tip_params["zero_lift_aoa_deg"]
             self.project.wing.twist_trim.cl_alpha_root_per_deg = root_params["cl_alpha_per_deg"]
             self.project.wing.twist_trim.cl_alpha_tip_per_deg = tip_params["cl_alpha_per_deg"]
+            self._sync_target_surface_from_controls()
             
             self.update_from_project()
             self.dataChanged.emit()
-            QMessageBox.information(self, "Success", "Estimated parameters from airfoils.")
+            QMessageBox.information(self, "Success", f"Estimated parameters from {surface.name} airfoils.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Estimation failed: {e}")
+        finally:
+            self._restore_legacy_surface_context(saved)
 
     def _on_optimize_twist(self):
+        surface = self._target_surface()
+        if surface is None:
+            return
+        saved = self._with_legacy_surface_context(surface)
         service = AeroSandboxService(self.project)
         try:
             twist = service.calculate_optimized_twist()
-            self.project.wing.optimized_twist_deg = twist
+            surface.twist.twist_deg = list(twist)
+            trim_adjustment = MultiSurfaceAeroService(self.project.aircraft).optimize_trim_surface(
+                target_static_margin_percent=self.project.wing.twist_trim.static_margin_percent,
+                target_cm=0.0,
+                airspeed_mps=self.aircraft_speed_spin.value(),
+                rho_kg_m3=self.aircraft_rho_spin.value(),
+            )
+            if trim_adjustment.surface_uid is not None:
+                self.project.aircraft.analyses.results["trim_surface_adjustment"] = trim_adjustment.as_dict()
+            self._load_target_surface_settings(surface)
             self._update_plots()
             self.dataChanged.emit()
-            QMessageBox.information(self, "Success", "Twist optimization complete.")
+            if trim_adjustment.surface_uid is not None:
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"{surface.name} twist optimization complete.\n"
+                    f"Trim surface adjusted: {trim_adjustment.surface_uid}, "
+                    f"x={trim_adjustment.moved_x_m:.3f} m, incidence={trim_adjustment.incidence_deg:.2f} deg, "
+                    f"CL={_fmt(trim_adjustment.trim_surface_cl, 3)}.",
+                )
+            else:
+                QMessageBox.information(self, "Success", f"{surface.name} twist optimization complete.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Optimization failed: {e}")
+        finally:
+            self._restore_legacy_surface_context(saved)
 
     def _on_analyze(self):
-        """Run full analysis and update all plots including Reynolds and circulation."""
+        """Run selected-surface AeroSandbox analysis and update plots."""
+        surface = self._target_surface()
+        if surface is None:
+            return
+        saved = self._with_legacy_surface_context(surface)
         service = AeroSandboxService(self.project)
         try:
             # Run AeroBuildup to get full results including CG
@@ -826,6 +1005,33 @@ class TwistTrimTab(QWidget):
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Analysis failed: {e}")
+        finally:
+            self._restore_legacy_surface_context(saved)
+
+    def _on_aircraft_analyze(self):
+        try:
+            service = MultiSurfaceAeroService(self.project.aircraft)
+            aero = service.run(
+                alpha_deg=self.aircraft_alpha_spin.value(),
+                beta_deg=self.aircraft_beta_spin.value(),
+                airspeed_mps=self.aircraft_speed_spin.value(),
+                rho_kg_m3=self.aircraft_rho_spin.value(),
+            )
+            trim = service.trim(
+                airspeed_mps=self.aircraft_speed_spin.value(),
+                rho_kg_m3=self.aircraft_rho_spin.value(),
+            )
+            stability = service.stability(
+                alpha_deg=self.aircraft_alpha_spin.value(),
+                airspeed_mps=self.aircraft_speed_spin.value(),
+            )
+            self.project.aircraft.analyses.results["multi_surface_aero"] = aero.as_dict()
+            self.project.aircraft.analyses.results["multi_surface_trim"] = trim.as_dict()
+            self.project.aircraft.analyses.results["multi_surface_stability"] = stability.as_dict()
+            self._update_aircraft_analysis_ui()
+            self.dataChanged.emit()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Aircraft analysis failed: {e}")
 
     def _on_visualize_flow(self):
         service = AeroSandboxService(self.project)
@@ -838,6 +1044,18 @@ class TwistTrimTab(QWidget):
 
     def update_from_project(self) -> None:
         self._loading = True
+        current_uid = self.target_surface_combo.currentData()
+        gui_settings = getattr(self.project.analysis, "gui_settings", {})
+        preferred_uid = gui_settings.get("selected_twist_trim_surface_uid") or gui_settings.get("selected_lifting_surface_uid")
+        self.target_surface_combo.clear()
+        for surface in self._analysis_target_surfaces():
+            role = _value(surface.role).replace("_", " ")
+            self.target_surface_combo.addItem(f"{surface.name} ({role})", surface.uid)
+        target_uid = preferred_uid or current_uid
+        if target_uid:
+            idx = self.target_surface_combo.findData(target_uid)
+            if idx >= 0:
+                self.target_surface_combo.setCurrentIndex(idx)
         params = self.project.wing.twist_trim
         for key, spin in self.inputs.items():
             current = getattr(params, key)
@@ -853,11 +1071,60 @@ class TwistTrimTab(QWidget):
             self.structural_spanload_box.setCurrentIndex(spanload_idx)
             
         self._loading = False
+        surface = self._target_surface()
+        if surface is not None:
+            self._load_target_surface_settings(surface)
+        self._update_aircraft_analysis_ui()
         self._update_plots()
 
+    def _update_aircraft_analysis_ui(self) -> None:
+        active_names = [
+            surface.name
+            for surface in self.project.aircraft.surfaces
+            if surface.active and surface.analysis_settings.active_in_aero
+        ]
+        self.aircraft_active_surfaces_label.setText(
+            "Active aero surfaces: " + (", ".join(active_names) if active_names else "none")
+        )
+        results = getattr(self.project.aircraft.analyses, "results", {})
+        aero = results.get("multi_surface_aero", {})
+        trim = results.get("multi_surface_trim", {})
+        stability = results.get("multi_surface_stability", {})
+
+        self.result_labels["aircraft_cl"].setText(_fmt(aero.get("CL")))
+        self.result_labels["aircraft_cd"].setText(_fmt(aero.get("CD")))
+        self.result_labels["aircraft_cm"].setText(_fmt(aero.get("Cm")))
+        self.result_labels["trim_alpha"].setText(_fmt(trim.get("alpha_deg")))
+        self.result_labels["static_margin"].setText(_fmt(stability.get("static_margin_percent")))
+
+        contributions = aero.get("surface_contributions", [])
+        self.aircraft_contrib_table.setRowCount(len(contributions))
+        for row, c in enumerate(contributions):
+            force = c.get("force_n", [0.0, 0.0, 0.0])
+            values = [
+                c.get("surface_uid", ""),
+                c.get("instance_uid", ""),
+                _fmt(c.get("CL")),
+                _fmt(c.get("CD")),
+                _fmt(c.get("CM")),
+                _fmt(force[0] if len(force) > 0 else None),
+                _fmt(force[2] if len(force) > 2 else None),
+            ]
+            for col, value in enumerate(values):
+                self.aircraft_contrib_table.setItem(row, col, QTableWidgetItem(str(value)))
+
     def _update_plots(self) -> None:
-        service = AeroSandboxService(self.project)
-        distribution = service.spanwise_distribution()
+        surface = self._target_surface()
+        saved = self._with_legacy_surface_context(surface) if surface is not None else None
+        try:
+            service = AeroSandboxService(self.project)
+            distribution = service.spanwise_distribution()
+        except Exception:
+            if saved is not None:
+                self._restore_legacy_surface_context(saved)
+            raise
+        if saved is not None:
+            self._restore_legacy_surface_context(saved)
         self.figure.clear()
         
         if not distribution:
@@ -876,7 +1143,8 @@ class TwistTrimTab(QWidget):
         ax_twist.set_ylabel("Twist [deg]")
         ax_twist.legend(fontsize="small")
         ax_twist.grid(True, alpha=0.3)
-        ax_twist.set_title("Twist Distribution")
+        target_name = surface.name if surface is not None else "Selected Surface"
+        ax_twist.set_title(f"{target_name} Twist")
         
         # Cl
         ax_cl.plot(span, [d.cl_design for d in distribution], label="Design Cl", color="#2ca02c")
@@ -884,7 +1152,7 @@ class TwistTrimTab(QWidget):
         ax_cl.set_ylabel("Cl")
         ax_cl.legend(fontsize="small")
         ax_cl.grid(True, alpha=0.3)
-        ax_cl.set_title("Lift Coefficient")
+        ax_cl.set_title(f"{target_name} Lift Coefficient")
         
         # Reynolds Number
         ax_reynolds.plot(span, [d.reynolds_trim for d in distribution], label="Cruise", color="#9467bd")
@@ -893,7 +1161,7 @@ class TwistTrimTab(QWidget):
         ax_reynolds.set_xlabel("Span Fraction")
         ax_reynolds.legend(fontsize="small")
         ax_reynolds.grid(True, alpha=0.3)
-        ax_reynolds.set_title("Reynolds Number")
+        ax_reynolds.set_title(f"{target_name} Reynolds Number")
         ax_reynolds.ticklabel_format(style='scientific', axis='y', scilimits=(0,0))
         
         # Lift Circulation (Gamma)
@@ -902,7 +1170,7 @@ class TwistTrimTab(QWidget):
         ax_gamma.set_xlabel("Span Fraction")
         ax_gamma.legend(fontsize="small")
         ax_gamma.grid(True, alpha=0.3)
-        ax_gamma.set_title("Lift Circulation")
+        ax_gamma.set_title(f"{target_name} Lift Circulation")
         
         self.figure.tight_layout()
         self.canvas.draw_idle()
@@ -1125,6 +1393,10 @@ class PerformanceTab(QWidget):
         self.force_toggle = QCheckBox("Show Forces/Moments")
         self.force_toggle.toggled.connect(lambda: self._update_plots(self.last_polars))
         btn_layout.addWidget(self.force_toggle)
+
+        self.aircraft_mode_check = QCheckBox("Use multi-surface aircraft model")
+        self.aircraft_mode_check.setChecked(True)
+        btn_layout.addWidget(self.aircraft_mode_check)
         
         btn_layout.addStretch()
         content_layout.addLayout(btn_layout)
@@ -1168,8 +1440,17 @@ class PerformanceTab(QWidget):
         self.labels[key] = label
 
     def _calculate(self):
-        service = AeroSandboxService(self.project)
         try:
+            if self.aircraft_mode_check.isChecked():
+                metrics, polars = self._calculate_aircraft_performance()
+                self.project.aircraft.analyses.results["performance_metrics"] = metrics
+                self.project.aircraft.analyses.results["performance_polars"] = polars
+                self._update_labels(metrics)
+                self.last_polars = polars
+                self._update_plots(polars)
+                return
+
+            service = AeroSandboxService(self.project)
             # 1. Calculate Metrics
             metrics = service.calculate_performance_metrics()
             self.project.analysis.performance_metrics = metrics
@@ -1184,6 +1465,52 @@ class PerformanceTab(QWidget):
             QMessageBox.critical(self, "Error", f"Performance calculation failed: {e}")
             import traceback
             traceback.print_exc()
+
+    def _calculate_aircraft_performance(self) -> tuple[dict, dict]:
+        service = MultiSurfaceAeroService(self.project.aircraft)
+        speed = float(self.project.aircraft.requirements.cruise_speed_mps or 20.0)
+        rho = 1.225
+        trim = service.trim(airspeed_mps=speed, rho_kg_m3=rho)
+        cruise_alpha = trim.alpha_deg if trim.alpha_deg is not None else 4.0
+        cruise = service.run(alpha_deg=cruise_alpha, airspeed_mps=speed, rho_kg_m3=rho)
+        takeoff_speed = 1.2 * speed
+        takeoff = service.run(alpha_deg=min(18.0, cruise_alpha + 4.0), airspeed_mps=takeoff_speed, rho_kg_m3=rho)
+
+        metrics = {
+            "cruise_velocity": speed,
+            "cruise_alpha": cruise_alpha,
+            "cruise_cl": cruise.CL,
+            "cruise_cd": cruise.CD,
+            "cruise_cm": cruise.Cm,
+            "cruise_l_d": cruise.CL / max(cruise.CD, 1e-9),
+            "takeoff_velocity": takeoff_speed,
+            "takeoff_alpha": min(18.0, cruise_alpha + 4.0),
+            "takeoff_cl": takeoff.CL,
+            "takeoff_cd": takeoff.CD,
+            "takeoff_cm": takeoff.Cm,
+            "takeoff_l_d": takeoff.CL / max(takeoff.CD, 1e-9),
+        }
+        metrics["cruise_l_d_uncorrected"] = metrics["cruise_l_d"]
+        metrics["takeoff_l_d_uncorrected"] = metrics["takeoff_l_d"]
+
+        alphas = list(np.linspace(-6.0, 18.0, 49))
+        polars = {"alpha": alphas, "cruise": {}, "takeoff": {}}
+        for label, v in (("cruise", speed), ("takeoff", takeoff_speed)):
+            q = 0.5 * rho * v * v
+            ref_area = max(self.project.aircraft.reference.reference_area_m2, 1e-9)
+            ref_chord = max(self.project.aircraft.reference.reference_chord_m, 1e-9)
+            values = {"CL": [], "CD": [], "CM": [], "L_D": [], "L": [], "D": [], "M": []}
+            for alpha in alphas:
+                res = service.run(alpha_deg=float(alpha), airspeed_mps=v, rho_kg_m3=rho)
+                values["CL"].append(res.CL)
+                values["CD"].append(res.CD)
+                values["CM"].append(res.Cm)
+                values["L_D"].append(res.CL / max(res.CD, 1e-9))
+                values["L"].append(res.CL * q * ref_area)
+                values["D"].append(res.CD * q * ref_area)
+                values["M"].append(res.Cm * q * ref_area * ref_chord)
+            polars[label] = values
+        return metrics, polars
 
     def _update_labels(self, metrics: dict):
         for key, label in self.labels.items():
@@ -1420,6 +1747,29 @@ class LiftingSurfacesTab(QWidget):
         airfoil_form.addRow("Tip airfoil", self.tip_airfoil_edit)
         content_layout.addWidget(airfoil_group)
 
+        analysis_group = QGroupBox("Analysis Defaults")
+        analysis_form = QFormLayout(analysis_group)
+        self.aero_active_check = QCheckBox("Include in aircraft aero")
+        self.cl_alpha_spin = _double_spin(0.001, 0.30, 0.001, 4)
+        self.zero_lift_spin = _double_spin(-20.0, 20.0, 0.1, 3)
+        self.cm0_spin = _double_spin(-2.0, 2.0, 0.01, 4)
+        self.cd0_spin = _double_spin(0.0, 1.0, 0.001, 4)
+        self.oswald_spin = _double_spin(0.1, 1.5, 0.01, 3)
+        self.cl_max_spin = _double_spin(0.1, 5.0, 0.05, 3)
+        self.trim_lift_combo = QComboBox()
+        self.trim_lift_combo.addItem("Auto", "auto")
+        self.trim_lift_combo.addItem("Positive lift", "positive")
+        self.trim_lift_combo.addItem("Negative lift", "negative")
+        analysis_form.addRow("Active", self.aero_active_check)
+        analysis_form.addRow("CL alpha [/deg]", self.cl_alpha_spin)
+        analysis_form.addRow("Zero-lift alpha [deg]", self.zero_lift_spin)
+        analysis_form.addRow("Cm0", self.cm0_spin)
+        analysis_form.addRow("CD0", self.cd0_spin)
+        analysis_form.addRow("Oswald e", self.oswald_spin)
+        analysis_form.addRow("CL max", self.cl_max_spin)
+        analysis_form.addRow("Trim lift convention", self.trim_lift_combo)
+        content_layout.addWidget(analysis_group)
+
         for label, widget in (
             ("UID", self.uid_edit),
             ("Name", self.name_edit),
@@ -1464,6 +1814,25 @@ class LiftingSurfacesTab(QWidget):
             planform_form.addRow(label, widget)
         content_layout.addWidget(planform_group)
 
+        twist_group = QGroupBox("Twist Distribution")
+        twist_layout = QVBoxLayout(twist_group)
+        self.twist_table = QTableWidget()
+        self.twist_table.setColumnCount(2)
+        self.twist_table.setHorizontalHeaderLabels(["Span eta", "Twist [deg]"])
+        self.twist_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.twist_table.itemChanged.connect(self._on_twist_table_changed)
+        twist_layout.addWidget(self.twist_table)
+        twist_btn_row = QHBoxLayout()
+        twist_reset_btn = QPushButton("Reset From Sections")
+        twist_reset_btn.clicked.connect(self._reset_twist_from_sections)
+        twist_btn_row.addWidget(twist_reset_btn)
+        twist_clear_btn = QPushButton("Clear Twist")
+        twist_clear_btn.clicked.connect(self._clear_twist_distribution)
+        twist_btn_row.addWidget(twist_clear_btn)
+        twist_btn_row.addStretch()
+        twist_layout.addLayout(twist_btn_row)
+        content_layout.addWidget(twist_group)
+
         bwb_group = QGroupBox("BWB Body Sections")
         bwb_layout = QVBoxLayout(bwb_group)
         self.bwb_table = QTableWidget()
@@ -1507,6 +1876,8 @@ class LiftingSurfacesTab(QWidget):
 
         for widget in (
             self.uid_edit, self.name_edit, self.bwb_airfoil_edit, self.root_airfoil_edit, self.tip_airfoil_edit,
+            self.aero_active_check, self.cl_alpha_spin, self.zero_lift_spin, self.cm0_spin,
+            self.cd0_spin, self.oswald_spin, self.cl_max_spin, self.trim_lift_combo,
             self.symmetry_combo, self.axis_combo,
             self.parent_combo, self.vertical_mode_combo,
             self.active_check, self.x_spin, self.y_spin, self.z_spin, self.incidence_spin,
@@ -1632,6 +2003,7 @@ class LiftingSurfacesTab(QWidget):
         is_winglet = _value(surface.role) == SurfaceRole.WINGLET.value
         self.parent_combo.setEnabled(is_winglet)
         self.vertical_mode_combo.setEnabled(is_vertical)
+        self.trim_lift_combo.setEnabled(_value(surface.role) in (SurfaceRole.HORIZONTAL_TAIL.value, SurfaceRole.CANARD.value, SurfaceRole.STABILATOR.value))
         self.area_spin.setEnabled(not is_winglet)
         chord_mode = self.chord_mode_combo.currentData() or "linear_taper"
         self.taper_spin.setEnabled(chord_mode == "linear_taper")
@@ -1701,6 +2073,7 @@ class LiftingSurfacesTab(QWidget):
         surface = self._current_surface()
         if surface is None:
             return
+        self._remember_selected_surface(surface.uid)
         self._apply_winglet_constraints(surface)
         self._loading = True
         self.uid_edit.setText(surface.uid)
@@ -1720,6 +2093,14 @@ class LiftingSurfacesTab(QWidget):
         self.bwb_airfoil_edit.setText(surface.airfoils.bwb_airfoil)
         self.root_airfoil_edit.setText(surface.airfoils.root_airfoil)
         self.tip_airfoil_edit.setText(surface.airfoils.tip_airfoil)
+        self.aero_active_check.setChecked(surface.analysis_settings.active_in_aero)
+        self.cl_alpha_spin.setValue(surface.analysis_settings.cl_alpha_per_deg)
+        self.zero_lift_spin.setValue(surface.analysis_settings.zero_lift_aoa_deg)
+        self.cm0_spin.setValue(surface.analysis_settings.cm0)
+        self.cd0_spin.setValue(surface.analysis_settings.cd0)
+        self.oswald_spin.setValue(surface.analysis_settings.oswald_efficiency)
+        self.cl_max_spin.setValue(surface.analysis_settings.cl_max)
+        _set_combo_by_data(self.trim_lift_combo, surface.analysis_settings.trim_lift_direction)
         self.sections_spin.setValue(max(2, int(getattr(surface.airfoils, "num_sections", 13) or 13)))
         self.area_spin.setValue(surface.planform.wing_area_m2)
         self.ar_spin.setValue(surface.planform.aspect_ratio)
@@ -1742,6 +2123,7 @@ class LiftingSurfacesTab(QWidget):
         self.snap_check.setChecked(surface.planform.snap_to_sections)
         self._update_vertical_controls(surface)
         self._loading = False
+        self._update_twist_table()
         self._update_bwb_table()
         self._update_cs_table()
         self._update_summary_and_plot(surface)
@@ -1760,6 +2142,10 @@ class LiftingSurfacesTab(QWidget):
         elif self.axis_combo.currentText() in (Axis.Z.value, Axis.NEG_Z.value):
             _set_combo(self.axis_combo, Axis.Y.value)
             _set_combo(self.symmetry_combo, SymmetryMode.MIRRORED_ABOUT_XZ.value)
+        if role == SurfaceRole.HORIZONTAL_TAIL.value:
+            _set_combo_by_data(self.trim_lift_combo, "negative")
+        elif role == SurfaceRole.CANARD.value:
+            _set_combo_by_data(self.trim_lift_combo, "positive")
         self._write_current_surface()
 
     def _write_current_surface(self, *_args):
@@ -1813,6 +2199,15 @@ class LiftingSurfacesTab(QWidget):
         surface.airfoils.root_airfoil = self.root_airfoil_edit.text().strip() or surface.airfoils.root_airfoil
         surface.airfoils.tip_airfoil = self.tip_airfoil_edit.text().strip() or surface.airfoils.tip_airfoil
         surface.airfoils.num_sections = int(self.sections_spin.value())
+        surface.analysis_settings.active_in_aero = self.aero_active_check.isChecked()
+        surface.analysis_settings.cl_alpha_per_deg = self.cl_alpha_spin.value()
+        surface.analysis_settings.zero_lift_aoa_deg = self.zero_lift_spin.value()
+        surface.analysis_settings.cm0 = self.cm0_spin.value()
+        surface.analysis_settings.cd0 = self.cd0_spin.value()
+        surface.analysis_settings.oswald_efficiency = self.oswald_spin.value()
+        surface.analysis_settings.cl_max = self.cl_max_spin.value()
+        surface.analysis_settings.trim_lift_direction = self.trim_lift_combo.currentData() or "auto"
+        self._sync_current_twist_distribution()
         self._sync_current_bwb_sections()
         surface.planform.reset_cache()
         if self._is_vertical_surface(surface):
@@ -1827,6 +2222,7 @@ class LiftingSurfacesTab(QWidget):
             self._refresh_parent_combo(surface)
             self._update_vertical_controls(surface)
             self._sync_spin_values_from_surface(surface)
+            self._update_twist_table()
             self._update_summary_and_plot(surface)
 
     def _on_role_flags_changed(self, *_args):
@@ -1880,9 +2276,19 @@ class LiftingSurfacesTab(QWidget):
         ax.set_aspect("equal", adjustable="datalim")
         ax.grid(True, alpha=0.3)
         if self.project.aircraft.surfaces:
+            self._plot_aircraft_reference_markers(ax, side_view=self._is_vertical_surface(surface))
             ax.legend(fontsize="small", loc="best")
         self.figure.tight_layout()
         self.canvas.draw_idle()
+
+    def _plot_aircraft_reference_markers(self, ax, side_view: bool) -> None:
+        cg = getattr(self.project.aircraft.reference, "cg_m", None)
+        if not cg:
+            return
+        if side_view:
+            ax.plot(cg[0], cg[2], marker="o", markersize=8, markeredgecolor="black", markerfacecolor="white", markeredgewidth=1.4, label="CG")
+        else:
+            ax.plot(cg[1], cg[0], marker="o", markersize=8, markeredgecolor="black", markerfacecolor="white", markeredgewidth=1.4, label="CG")
 
     def _plot_surface_planform(self, ax, surface: LiftingSurface, color: str, selected: bool) -> None:
         plan = surface.planform
@@ -2139,7 +2545,7 @@ class LiftingSurfacesTab(QWidget):
                 chord = section["chord"]
                 x_le = x0 + section["x_le"]
                 z_le = z0 + math.tan(math.radians(surface.planform.dihedral_deg)) * section["y"]
-                twist = math.radians(surface.incidence_deg)
+                twist = math.radians(surface.incidence_deg + section.get("twist_deg", 0.0))
                 xs = []
                 zs = []
                 for xi, zi in zip(x_airfoil, z_airfoil):
@@ -2161,6 +2567,7 @@ class LiftingSurfacesTab(QWidget):
         n = max(3, int(getattr(surface.airfoils, "num_sections", 13) or 13))
         half_span = plan.half_span()
         root = plan.extended_root_chord()
+        twists = list(getattr(surface.twist, "twist_deg", []) or [])
         sections = []
         for i in range(n):
             eta = i / (n - 1)
@@ -2175,6 +2582,7 @@ class LiftingSurfacesTab(QWidget):
                     "y": y,
                     "x_le": x_le,
                     "chord": chord,
+                    "twist_deg": _twist_at_index(twists, i, n),
                     "front_frac": (plan.front_spar_root_percent + (plan.front_spar_tip_percent - plan.front_spar_root_percent) * eta) / 100.0,
                     "rear_frac": (plan.rear_spar_root_percent + (plan.rear_spar_tip_percent - plan.rear_spar_root_percent) * eta) / 100.0,
                 }
@@ -2192,9 +2600,69 @@ class LiftingSurfacesTab(QWidget):
                 t = (y - s1["y"]) / max(1e-9, s2["y"] - s1["y"])
                 return {
                     key: (s1[key] + (s2[key] - s1[key]) * t)
-                    for key in ("eta", "y", "x_le", "chord", "front_frac", "rear_frac")
+                    for key in ("eta", "y", "x_le", "chord", "twist_deg", "front_frac", "rear_frac")
                 }
         return dict(sections[-1])
+
+    def _update_twist_table(self) -> None:
+        surface = self._current_surface()
+        if surface is None:
+            return
+        n = max(2, int(getattr(surface.airfoils, "num_sections", 13) or 13))
+        twists = list(surface.twist.twist_deg)
+        if not twists:
+            twists = [0.0] * n
+        elif len(twists) < n:
+            twists.extend([twists[-1]] * (n - len(twists)))
+        elif len(twists) > n:
+            twists = twists[:n]
+
+        self._loading = True
+        self.twist_table.setRowCount(n)
+        for row in range(n):
+            eta = row / max(1, n - 1)
+            eta_item = QTableWidgetItem(f"{eta:.3f}")
+            eta_item.setFlags(eta_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.twist_table.setItem(row, 0, eta_item)
+            self.twist_table.setItem(row, 1, QTableWidgetItem(f"{float(twists[row]):.3f}"))
+        self._loading = False
+
+    def _sync_current_twist_distribution(self) -> None:
+        surface = self._current_surface()
+        if surface is None or not hasattr(self, "twist_table"):
+            return
+        twists = []
+        for row in range(self.twist_table.rowCount()):
+            try:
+                twists.append(float(_table_text(self.twist_table, row, 1, "0")))
+            except ValueError:
+                twists.append(0.0)
+        surface.twist.twist_deg = twists
+
+    def _on_twist_table_changed(self, item: QTableWidgetItem) -> None:
+        if self._loading:
+            return
+        self._sync_current_twist_distribution()
+        surface = self._current_surface()
+        if surface is not None:
+            self._update_summary_and_plot(surface)
+
+    def _reset_twist_from_sections(self) -> None:
+        surface = self._current_surface()
+        if surface is None:
+            return
+        n = max(2, int(getattr(surface.airfoils, "num_sections", 13) or 13))
+        surface.twist.twist_deg = [0.0] * n
+        self._update_twist_table()
+        self._update_summary_and_plot(surface)
+
+    def _clear_twist_distribution(self) -> None:
+        surface = self._current_surface()
+        if surface is None:
+            return
+        surface.twist.twist_deg = []
+        self._update_twist_table()
+        self._update_summary_and_plot(surface)
 
     def _update_bwb_table(self) -> None:
         surface = self._current_surface()
@@ -2338,6 +2806,8 @@ class LiftingSurfacesTab(QWidget):
             self.project.sync_legacy_wing_to_aircraft()
         self.project.sync_aircraft_main_wing_to_legacy()
         self.update_from_project()
+        if choice in {"Conventional", "Canard", "Twin Fin"}:
+            self._select_surface("main_wing")
 
     def _add_surface(self):
         idx = len(self.project.aircraft.surfaces) + 1
@@ -2383,15 +2853,31 @@ class LiftingSurfacesTab(QWidget):
         idx = self.surface_combo.findData(uid)
         if idx >= 0:
             self.surface_combo.setCurrentIndex(idx)
+            self._remember_selected_surface(uid)
             self._load_current_surface()
+
+    def _remember_selected_surface(self, uid: str) -> None:
+        settings = getattr(self.project.analysis, "gui_settings", None)
+        if settings is None:
+            self.project.analysis.gui_settings = {}
+            settings = self.project.analysis.gui_settings
+        settings["selected_lifting_surface_uid"] = uid
+        analysis_settings = settings.setdefault("analysis_tab", {})
+        if isinstance(analysis_settings, dict):
+            analysis_settings["surface_uid"] = uid
 
     def _remove_surface(self):
         surface = self._current_surface()
         if surface is None:
             return
         if _value(surface.role) == SurfaceRole.MAIN_WING.value:
-            QMessageBox.warning(self, "Surface", "Choose another main wing before removing this surface.")
-            return
+            remaining_main_wings = [
+                s for s in self.project.aircraft.surfaces
+                if s is not surface and _value(s.role) == SurfaceRole.MAIN_WING.value
+            ]
+            if not remaining_main_wings:
+                QMessageBox.warning(self, "Surface", "Choose another main wing before removing the last main-wing surface.")
+                return
         self.project.aircraft.surfaces = [s for s in self.project.aircraft.surfaces if s is not surface]
         self.update_from_project()
 
@@ -2717,6 +3203,142 @@ class FuselageTab(QWidget):
             self.update_from_project()
 
 
+class MassCgTab(QWidget):
+    dataChanged = pyqtSignal()
+
+    def __init__(self, project: Project):
+        super().__init__()
+        self.project = project
+        self._build_ui()
+        self.update_from_project()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        controls = QHBoxLayout()
+        add_btn = QPushButton("Add Item")
+        add_btn.clicked.connect(self._add_mass_item)
+        controls.addWidget(add_btn)
+        remove_btn = QPushButton("Remove Selected")
+        remove_btn.clicked.connect(self._remove_mass_item)
+        controls.addWidget(remove_btn)
+        apply_btn = QPushButton("Apply CG to Aircraft Reference")
+        apply_btn.clicked.connect(self._apply_mass_cg)
+        controls.addWidget(apply_btn)
+        controls.addStretch()
+        layout.addLayout(controls)
+
+        self.mass_table = QTableWidget()
+        self.mass_table.setColumnCount(7)
+        self.mass_table.setHorizontalHeaderLabels(["Name", "Category", "Mass [kg]", "X [m]", "Y [m]", "Z [m]", "Notes"])
+        self.mass_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.mass_table.itemChanged.connect(self._on_mass_table_changed)
+        layout.addWidget(self.mass_table)
+
+        summary = QGroupBox("Mass Balance")
+        summary_form = QFormLayout(summary)
+        self.mass_total_label = QLabel("-")
+        self.mass_cg_label = QLabel("-")
+        self.mass_warning_label = QLabel("-")
+        summary_form.addRow("Total mass", self.mass_total_label)
+        summary_form.addRow("CG [m]", self.mass_cg_label)
+        summary_form.addRow("Warnings", self.mass_warning_label)
+        layout.addWidget(summary)
+
+    def update_from_project(self):
+        if self.project is None:
+            return
+        self._refresh_mass_table()
+
+    def sync_to_project(self):
+        self._sync_mass_table()
+
+    def _mass_categories(self) -> List[str]:
+        return [
+            "battery", "motor", "esc", "servo", "payload", "receiver",
+            "autopilot", "structure", "fuselage", "landing_gear", "other",
+        ]
+
+    def _refresh_mass_table(self):
+        self.mass_table.blockSignals(True)
+        self.mass_table.setRowCount(len(self.project.aircraft.mass_items))
+        for row, item in enumerate(self.project.aircraft.mass_items):
+            values = [item.name, item.category, item.mass_kg, item.cg_m[0], item.cg_m[1], item.cg_m[2], item.notes]
+            for col, value in enumerate(values):
+                text = f"{value:.4f}" if isinstance(value, float) else str(value)
+                self.mass_table.setItem(row, col, QTableWidgetItem(text))
+        self.mass_table.blockSignals(False)
+        self._update_mass_summary()
+
+    def _sync_mass_table(self):
+        if self.project is None:
+            return
+        items = []
+        categories = set(self._mass_categories())
+        for row in range(self.mass_table.rowCount()):
+            try:
+                name = _table_text(self.mass_table, row, 0, f"Mass {row + 1}")
+                category = _table_text(self.mass_table, row, 1, "other").lower()
+                if category not in categories:
+                    category = "other"
+                mass_kg = max(0.0, float(_table_text(self.mass_table, row, 2, "0")))
+                cg = (
+                    float(_table_text(self.mass_table, row, 3, "0")),
+                    float(_table_text(self.mass_table, row, 4, "0")),
+                    float(_table_text(self.mass_table, row, 5, "0")),
+                )
+                items.append(
+                    MassItem(
+                        uid=_uid_from_name(name, row),
+                        name=name,
+                        mass_kg=mass_kg,
+                        cg_m=cg,
+                        category=category,
+                        notes=_table_text(self.mass_table, row, 6, ""),
+                    )
+                )
+            except ValueError:
+                continue
+        self.project.aircraft.mass_items = items
+        self._update_mass_summary()
+
+    def _on_mass_table_changed(self, _item):
+        self._sync_mass_table()
+        self.dataChanged.emit()
+
+    def _add_mass_item(self):
+        if self.project is None:
+            return
+        idx = len(self.project.aircraft.mass_items) + 1
+        self.project.aircraft.mass_items.append(
+            MassItem(uid=f"mass_{idx}", name=f"Mass {idx}", mass_kg=0.1, cg_m=self.project.aircraft.reference.cg_m, category="other")
+        )
+        self._refresh_mass_table()
+        self.dataChanged.emit()
+
+    def _remove_mass_item(self):
+        if self.project is None:
+            return
+        row = self.mass_table.currentRow()
+        if 0 <= row < len(self.project.aircraft.mass_items):
+            self.project.aircraft.mass_items.pop(row)
+            self._refresh_mass_table()
+            self.dataChanged.emit()
+
+    def _apply_mass_cg(self):
+        if self.project is None:
+            return
+        self._sync_mass_table()
+        balance = apply_mass_balance_to_reference(self.project.aircraft)
+        self._update_mass_summary(balance)
+        self.dataChanged.emit()
+
+    def _update_mass_summary(self, balance=None):
+        balance = balance or compute_mass_balance(self.project.aircraft)
+        self.mass_total_label.setText(f"{balance.total_mass_kg:.4f} kg")
+        self.mass_cg_label.setText(f"({balance.cg_m[0]:.4f}, {balance.cg_m[1]:.4f}, {balance.cg_m[2]:.4f})")
+        self.mass_warning_label.setText("; ".join(balance.warnings) if balance.warnings else "-")
+
+
 # --- Main Geometry Tab ---
 class GeometryTab(QTabWidget):
     def __init__(self, project: Project):
@@ -2724,8 +3346,15 @@ class GeometryTab(QTabWidget):
         self.project = project
         self.lifting_surfaces_tab = LiftingSurfacesTab(project)
         self.fuselage_tab = FuselageTab(project)
+        self.mass_cg_tab = MassCgTab(project)
+        self.mass_cg_tab.dataChanged.connect(self._on_geometry_data_changed)
         self.addTab(self.lifting_surfaces_tab, "Lifting Surfaces")
+        self.addTab(self.mass_cg_tab, "Mass / CG")
         self.addTab(self.fuselage_tab, "Fuselage / Bodies")
+
+    def _on_geometry_data_changed(self):
+        self.lifting_surfaces_tab.project = self.project
+        self.lifting_surfaces_tab.update_from_project()
 
     def update_from_project(self):
         for tab in self._tabs():
@@ -2740,7 +3369,7 @@ class GeometryTab(QTabWidget):
         self.project.sync_aircraft_main_wing_to_legacy()
 
     def _tabs(self):
-        return (self.lifting_surfaces_tab, self.fuselage_tab)
+        return (self.lifting_surfaces_tab, self.mass_cg_tab, self.fuselage_tab)
 
 
 def _double_spin(min_value: float, max_value: float, step: float, decimals: int) -> QDoubleSpinBox:
@@ -2749,6 +3378,29 @@ def _double_spin(min_value: float, max_value: float, step: float, decimals: int)
     spin.setSingleStep(step)
     spin.setDecimals(decimals)
     return spin
+
+
+def _fmt(value, digits: int = 4) -> str:
+    if value is None:
+        return "-"
+    try:
+        return f"{float(value):.{digits}f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _twist_at_index(twists: List[float], index: int, count: int) -> float:
+    if not twists:
+        return 0.0
+    if len(twists) == count:
+        return float(twists[index])
+    if count <= 1 or len(twists) == 1:
+        return float(twists[0])
+    source_pos = index * (len(twists) - 1) / max(1, count - 1)
+    lo = int(math.floor(source_pos))
+    hi = min(len(twists) - 1, lo + 1)
+    frac = source_pos - lo
+    return float(twists[lo]) * (1.0 - frac) + float(twists[hi]) * frac
 
 
 def _value(value) -> str:
@@ -2772,11 +3424,17 @@ def _table_text(table: QTableWidget, row: int, col: int, default) -> str:
     return item.text().strip() if item and item.text().strip() else str(default)
 
 
+def _uid_from_name(name: str, row: int) -> str:
+    text = re.sub(r"[^a-zA-Z0-9_]+", "_", name.strip().lower()).strip("_")
+    return text or f"mass_{row + 1}"
+
+
 def _surface_sections_for_plot(surface: LiftingSurface) -> List[dict]:
     plan = surface.planform
     n = max(3, int(getattr(surface.airfoils, "num_sections", 13) or 13))
     half_span = plan.half_span()
     root = plan.extended_root_chord()
+    twists = list(getattr(surface.twist, "twist_deg", []) or [])
     sections = []
     for i in range(n):
         eta = i / (n - 1)
@@ -2791,6 +3449,7 @@ def _surface_sections_for_plot(surface: LiftingSurface) -> List[dict]:
                 "y": y,
                 "x_le": x_le,
                 "chord": chord,
+                "twist_deg": _twist_at_index(twists, i, n),
                 "front_frac": (plan.front_spar_root_percent + (plan.front_spar_tip_percent - plan.front_spar_root_percent) * eta) / 100.0,
                 "rear_frac": (plan.rear_spar_root_percent + (plan.rear_spar_tip_percent - plan.rear_spar_root_percent) * eta) / 100.0,
             }

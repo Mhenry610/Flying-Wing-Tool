@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QGroupBox, QFormLayout, QComboBox, QDoubleSpinBox, QSpinBox,
     QCheckBox, QMessageBox, QScrollArea, QSplitter, QFrame,
-    QTextEdit, QTabWidget
+    QTextEdit, QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PyQt6.QtCore import Qt
 
@@ -30,6 +30,8 @@ from core.models.materials import (
     get_material_by_name
 )
 from services.geometry import AeroSandboxService
+from services.aircraft import analyze_conceptual_structure
+from core.structures import StructuralElement, StructuralElementType, StructuralLocation, StructuralSection
 
 
 class StructureTab(QWidget):
@@ -237,6 +239,37 @@ class StructureTab(QWidget):
         controls_layout.addLayout(button_layout)
         
         main_layout.addLayout(controls_layout)
+
+        generic_group = QGroupBox("Generic Surface Structural Layout")
+        generic_layout = QVBoxLayout(generic_group)
+        generic_top = QHBoxLayout()
+        generic_top.addWidget(QLabel("Surface"))
+        self.struct_surface_combo = QComboBox()
+        self.struct_surface_combo.currentIndexChanged.connect(self._load_structural_elements)
+        generic_top.addWidget(self.struct_surface_combo, 1)
+        add_element_btn = QPushButton("Add Element")
+        add_element_btn.clicked.connect(self._add_structural_element)
+        generic_top.addWidget(add_element_btn)
+        remove_element_btn = QPushButton("Remove Selected")
+        remove_element_btn.clicked.connect(self._remove_structural_element)
+        generic_top.addWidget(remove_element_btn)
+        run_conceptual_btn = QPushButton("Run Conceptual Structure")
+        run_conceptual_btn.clicked.connect(self._run_conceptual_structure)
+        generic_top.addWidget(run_conceptual_btn)
+        generic_layout.addLayout(generic_top)
+
+        self.struct_table = QTableWidget()
+        self.struct_table.setColumnCount(15)
+        self.struct_table.setHorizontalHeaderLabels([
+            "UID", "Type", "Material", "Coord",
+            "Start eta/X", "Start chord/Y", "Start Z",
+            "End eta/X", "End chord/Y", "End Z",
+            "Shape", "OD [mm]", "Wall/Thk [mm]", "Width [mm]", "Height [mm]",
+        ])
+        self.struct_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.struct_table.itemChanged.connect(self._on_struct_table_changed)
+        generic_layout.addWidget(self.struct_table)
+        main_layout.addWidget(generic_group)
         
         # Advanced Options Group (hidden by default, shown when "Show Advanced Properties" is checked)
         self.advanced_group = QGroupBox("Advanced Options")
@@ -1259,6 +1292,148 @@ class StructureTab(QWidget):
             pass
         
         ax.view_init(elev=25, azim=-60)
+
+    def _current_struct_surface(self):
+        uid = self.struct_surface_combo.currentData() if hasattr(self, "struct_surface_combo") else None
+        for surface in getattr(self.project.aircraft, "surfaces", []):
+            if surface.uid == uid:
+                return surface
+        return self.project.aircraft.surfaces[0] if getattr(self.project.aircraft, "surfaces", []) else None
+
+    def _refresh_struct_surface_combo(self):
+        if not hasattr(self, "struct_surface_combo") or self.project is None:
+            return
+        current = self.struct_surface_combo.currentData()
+        self.struct_surface_combo.blockSignals(True)
+        self.struct_surface_combo.clear()
+        for surface in self.project.aircraft.surfaces:
+            self.struct_surface_combo.addItem(f"{surface.name} ({surface.uid})", surface.uid)
+        if current:
+            idx = self.struct_surface_combo.findData(current)
+            if idx >= 0:
+                self.struct_surface_combo.setCurrentIndex(idx)
+        self.struct_surface_combo.blockSignals(False)
+        self._load_structural_elements()
+
+    def _load_structural_elements(self):
+        surface = self._current_struct_surface()
+        if surface is None or not hasattr(self, "struct_table"):
+            return
+        self.struct_table.blockSignals(True)
+        elements = surface.structural_layout.elements
+        self.struct_table.setRowCount(len(elements))
+        for row, element in enumerate(elements):
+            coord = surface.structural_layout.coordinate_system
+            start = element.start.aircraft_xyz_m if coord == "aircraft" and element.start.aircraft_xyz_m else (
+                element.start.eta, element.start.chord_fraction, element.start.z_offset_m
+            )
+            end = element.end.aircraft_xyz_m if coord == "aircraft" and element.end.aircraft_xyz_m else (
+                element.end.eta, element.end.chord_fraction, element.end.z_offset_m
+            )
+            wall_or_thickness = element.section.wall_thickness_mm if element.section.shape == "tube" else element.section.thickness_mm
+            values = [
+                element.uid, _enum_text(element.type), element.material_uid, coord,
+                start[0], start[1], start[2], end[0], end[1], end[2],
+                element.section.shape, element.section.outer_diameter_mm,
+                wall_or_thickness, element.section.width_mm, element.section.height_mm,
+            ]
+            for col, value in enumerate(values):
+                text = f"{value:.4f}" if isinstance(value, float) else ("" if value is None else str(value))
+                self.struct_table.setItem(row, col, QTableWidgetItem(text))
+        self.struct_table.blockSignals(False)
+
+    def _sync_structural_elements(self):
+        surface = self._current_struct_surface()
+        if surface is None or not hasattr(self, "struct_table"):
+            return
+        elements = []
+        layout_coord = surface.structural_layout.coordinate_system
+        for row in range(self.struct_table.rowCount()):
+            try:
+                coord = _table_text(self.struct_table, row, 3, "surface_local")
+                coord = "aircraft" if coord.lower().startswith("air") else "surface_local"
+                layout_coord = coord
+                start_a = _float_or_none(_table_text(self.struct_table, row, 4, ""))
+                start_b = _float_or_none(_table_text(self.struct_table, row, 5, ""))
+                start_c = float(_table_text(self.struct_table, row, 6, "0"))
+                end_a = _float_or_none(_table_text(self.struct_table, row, 7, ""))
+                end_b = _float_or_none(_table_text(self.struct_table, row, 8, ""))
+                end_c = float(_table_text(self.struct_table, row, 9, "0"))
+                if coord == "aircraft":
+                    start = StructuralLocation(aircraft_xyz_m=(float(start_a or 0.0), float(start_b or 0.0), start_c))
+                    end = StructuralLocation(aircraft_xyz_m=(float(end_a or 0.0), float(end_b or 0.0), end_c))
+                else:
+                    start = StructuralLocation(eta=start_a, chord_fraction=start_b, z_offset_m=start_c)
+                    end = StructuralLocation(eta=end_a, chord_fraction=end_b, z_offset_m=end_c)
+
+                shape = _table_text(self.struct_table, row, 10, "rectangular")
+                wall_or_thickness = _float_or_none(_table_text(self.struct_table, row, 12, ""))
+                section = StructuralSection(
+                    shape=shape,
+                    outer_diameter_mm=_float_or_none(_table_text(self.struct_table, row, 11, "")),
+                    wall_thickness_mm=wall_or_thickness if shape == "tube" else None,
+                    thickness_mm=wall_or_thickness if shape != "tube" else None,
+                    width_mm=_float_or_none(_table_text(self.struct_table, row, 13, "")),
+                    height_mm=_float_or_none(_table_text(self.struct_table, row, 14, "")),
+                )
+                elements.append(
+                    StructuralElement(
+                        uid=_table_text(self.struct_table, row, 0, f"element_{row + 1}"),
+                        type=_table_text(self.struct_table, row, 1, StructuralElementType.CUSTOM_BEAM.value),
+                        material_uid=_table_text(self.struct_table, row, 2, "default"),
+                        start=start,
+                        end=end,
+                        section=section,
+                    )
+                )
+            except ValueError:
+                continue
+        surface.structural_layout.coordinate_system = layout_coord
+        surface.structural_layout.elements = elements
+
+    def _on_struct_table_changed(self, _item):
+        self._sync_structural_elements()
+
+    def _add_structural_element(self):
+        surface = self._current_struct_surface()
+        if surface is None:
+            return
+        idx = len(surface.structural_layout.elements) + 1
+        surface.structural_layout.coordinate_system = "surface_local"
+        surface.structural_layout.elements.append(
+            StructuralElement(
+                uid=f"{surface.uid}_element_{idx}",
+                type=StructuralElementType.TUBE_SPAR,
+                material_uid="carbon_tube",
+                start=StructuralLocation(eta=0.0, chord_fraction=0.25),
+                end=StructuralLocation(eta=1.0, chord_fraction=0.25),
+                section=StructuralSection(shape="tube", outer_diameter_mm=8.0, wall_thickness_mm=0.75),
+            )
+        )
+        self._load_structural_elements()
+
+    def _remove_structural_element(self):
+        surface = self._current_struct_surface()
+        row = self.struct_table.currentRow() if hasattr(self, "struct_table") else -1
+        if surface is not None and 0 <= row < len(surface.structural_layout.elements):
+            surface.structural_layout.elements.pop(row)
+            self._load_structural_elements()
+
+    def _run_conceptual_structure(self):
+        try:
+            self._sync_structural_elements()
+            result = analyze_conceptual_structure(self.project.aircraft)
+            self.project.aircraft.analyses.results["conceptual_structure"] = result.as_dict()
+            self.summary_text.setPlainText(
+                "Conceptual aircraft structure\n"
+                f"Total structural mass: {result.total_structural_mass_kg:.4f} kg\n"
+                f"Tip deflection estimate: {_fmt_optional(result.tip_deflection_m)} m\n"
+                f"Mass by surface: {result.mass_by_surface}\n"
+                f"Mass by element type: {result.mass_by_element_type}\n"
+                f"Warnings: {'; '.join(result.warnings) if result.warnings else '-'}"
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", f"Conceptual structure failed: {exc}")
     
     def sync_to_project(self):
         """Push all editable controls into project state before saving."""
@@ -1270,6 +1445,7 @@ class StructureTab(QWidget):
         planform.rib_material_name = self.rib_material_combo.currentText()
         planform.stringer_material_name = self.stringer_material_combo.currentText()
         self._on_geometry_changed()
+        self._sync_structural_elements()
         settings = getattr(self.project.analysis, "gui_settings", None)
         if settings is None:
             self.project.analysis.gui_settings = {}
@@ -1325,6 +1501,7 @@ class StructureTab(QWidget):
         """Update UI from project state."""
         if not hasattr(self.project.wing, 'planform'):
             return
+        self._refresh_struct_surface_combo()
         
         planform = self.project.wing.planform
         
@@ -2287,3 +2464,25 @@ class StructureTab(QWidget):
         
         fig.tight_layout(rect=[0, 0, 1, 0.96])
         return fig
+
+
+def _table_text(table: QTableWidget, row: int, col: int, default: Any) -> str:
+    item = table.item(row, col)
+    return item.text().strip() if item and item.text().strip() else str(default)
+
+
+def _float_or_none(value: str):
+    text = str(value).strip()
+    if not text:
+        return None
+    return float(text)
+
+
+def _enum_text(value) -> str:
+    return value.value if hasattr(value, "value") else str(value)
+
+
+def _fmt_optional(value) -> str:
+    if value is None:
+        return "-"
+    return f"{float(value):.4f}"

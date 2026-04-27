@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from math import pi
 
 from core.aircraft.project import AircraftProject
+from core.aircraft.references import SurfaceTransform
 from core.geometry.assembly import SurfaceInstance, assemble_surface_instances
 
 
@@ -121,6 +122,32 @@ class StabilityResult:
         }
 
 
+@dataclass
+class TrimSurfaceAdjustmentResult:
+    surface_uid: str | None
+    moved_x_m: float | None
+    incidence_deg: float | None
+    alpha_deg: float | None
+    cm: float | None
+    trim_surface_cl: float | None
+    static_margin_percent: float | None
+    target_static_margin_percent: float | None
+    warnings: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict:
+        return {
+            "surface_uid": self.surface_uid,
+            "moved_x_m": self.moved_x_m,
+            "incidence_deg": self.incidence_deg,
+            "alpha_deg": self.alpha_deg,
+            "cm": self.cm,
+            "trim_surface_cl": self.trim_surface_cl,
+            "static_margin_percent": self.static_margin_percent,
+            "target_static_margin_percent": self.target_static_margin_percent,
+            "warnings": list(self.warnings),
+        }
+
+
 class MultiSurfaceAeroService:
     """Conceptual multi-surface aero aggregation.
 
@@ -228,10 +255,10 @@ class MultiSurfaceAeroService:
             warnings=warnings + result.warnings,
         )
 
-    def stability(self, alpha_deg: float = 4.0, airspeed_mps: float = 20.0) -> StabilityResult:
+    def stability(self, alpha_deg: float = 4.0, airspeed_mps: float = 20.0, rho_kg_m3: float = 1.225) -> StabilityResult:
         da = 0.5
-        minus = self.run(alpha_deg - da, airspeed_mps=airspeed_mps)
-        plus = self.run(alpha_deg + da, airspeed_mps=airspeed_mps)
+        minus = self.run(alpha_deg - da, airspeed_mps=airspeed_mps, rho_kg_m3=rho_kg_m3)
+        plus = self.run(alpha_deg + da, airspeed_mps=airspeed_mps, rho_kg_m3=rho_kg_m3)
         dcm_da = (plus.Cm - minus.Cm) / (2.0 * da)
         warnings: list[str] = []
         mac = self.aircraft.reference.reference_chord_m
@@ -252,6 +279,149 @@ class MultiSurfaceAeroService:
             warnings=warnings + plus.warnings,
         )
 
+    def optimize_trim_surface(
+        self,
+        target_static_margin_percent: float,
+        target_cm: float = 0.0,
+        airspeed_mps: float = 20.0,
+        rho_kg_m3: float = 1.225,
+        alpha_bounds_deg: tuple[float, float] = (-8.0, 18.0),
+        incidence_bounds_deg: tuple[float, float] = (-15.0, 15.0),
+        x_search_span_m: float | None = None,
+    ) -> TrimSurfaceAdjustmentResult:
+        """Move the active trim surface for static margin, then set incidence for Cm.
+
+        This is a conceptual sizing helper for conventional/canard topologies. The
+        trim surface x-location affects dCm/dAlpha and therefore neutral point;
+        incidence primarily changes the moment intercept at the design condition.
+        """
+        trim_surface = self._primary_trim_surface()
+        if trim_surface is None:
+            return TrimSurfaceAdjustmentResult(None, None, None, None, None, None, None, target_static_margin_percent, ["No active trim surface was found."])
+
+        original_transform = trim_surface.transform
+        original_incidence = trim_surface.incidence_deg
+        warnings: list[str] = []
+        ref_chord = max(self.aircraft.reference.reference_chord_m, 0.05)
+        search_span = x_search_span_m if x_search_span_m is not None else max(0.5, 5.0 * ref_chord)
+        x0, y0, z0 = trim_surface.transform.origin_m
+
+        best_x = x0
+        best_sm = None
+        best_score = float("inf")
+        alpha_for_stability = self._alpha_for_target_cl(airspeed_mps, rho_kg_m3, alpha_bounds_deg)
+        for i in range(81):
+            x = x0 - 0.5 * search_span + search_span * i / 80.0
+            self._set_surface_x(trim_surface, x)
+            stability = self.stability(alpha_deg=alpha_for_stability, airspeed_mps=airspeed_mps, rho_kg_m3=rho_kg_m3)
+            if stability.static_margin_percent is None:
+                continue
+            score = abs(stability.static_margin_percent - target_static_margin_percent)
+            if score < best_score:
+                best_score = score
+                best_x = x
+                best_sm = stability.static_margin_percent
+
+        self._set_surface_x(trim_surface, best_x)
+        if best_sm is None:
+            warnings.append("Static margin could not be evaluated while moving the trim surface.")
+
+        best_incidence = original_incidence
+        best_alpha = None
+        best_cm = None
+        best_trim_cl = None
+        best_inc_score = float("inf")
+        best_any = None
+        best_any_score = float("inf")
+        direction = str(getattr(trim_surface.analysis_settings, "trim_lift_direction", "auto") or "auto").lower()
+        inc_lo, inc_hi = incidence_bounds_deg
+        for i in range(81):
+            incidence = inc_lo + (inc_hi - inc_lo) * i / 80.0
+            trim_surface.incidence_deg = incidence
+            alpha = self._alpha_for_target_cl(airspeed_mps, rho_kg_m3, alpha_bounds_deg)
+            result = self.run(alpha, airspeed_mps=airspeed_mps, rho_kg_m3=rho_kg_m3)
+            trim_cl = _surface_average_cl(result, trim_surface.uid)
+            cm_error = abs(result.Cm - target_cm)
+            any_score = cm_error + 0.02 * abs(trim_cl)
+            if any_score < best_any_score:
+                best_any_score = any_score
+                best_any = (incidence, alpha, result.Cm, trim_cl)
+            if not _trim_lift_sign_allowed(trim_cl, direction):
+                continue
+            score = cm_error
+            if score < best_inc_score:
+                best_inc_score = score
+                best_incidence = incidence
+                best_alpha = alpha
+                best_cm = result.Cm
+                best_trim_cl = trim_cl
+
+        if best_alpha is None and best_any is not None:
+            best_incidence, best_alpha, best_cm, best_trim_cl = best_any
+            warnings.append(f"Trim lift convention '{direction}' could not be satisfied while searching incidence.")
+
+        trim_surface.incidence_deg = best_incidence
+        final_stability = self.stability(alpha_deg=best_alpha if best_alpha is not None else alpha_for_stability, airspeed_mps=airspeed_mps, rho_kg_m3=rho_kg_m3)
+        if best_sm is not None and abs((final_stability.static_margin_percent or best_sm) - target_static_margin_percent) > 2.0:
+            warnings.append("Trim surface x search did not reach the requested static margin within 2 percentage points.")
+        if best_cm is not None and abs(best_cm - target_cm) > 0.03:
+            warnings.append("Trim surface incidence search did not reach the requested Cm within 0.03.")
+        if not _trim_lift_sign_allowed(best_trim_cl, direction):
+            warnings.append(f"Trim surface lift sign does not match the configured '{direction}' convention.")
+
+        # Keep the intentional optimized transform/incidence; restore only if no solution at all.
+        if best_sm is None and best_cm is None:
+            trim_surface.transform = original_transform
+            trim_surface.incidence_deg = original_incidence
+
+        return TrimSurfaceAdjustmentResult(
+            surface_uid=trim_surface.uid,
+            moved_x_m=trim_surface.transform.origin_m[0],
+            incidence_deg=trim_surface.incidence_deg,
+            alpha_deg=best_alpha,
+            cm=best_cm,
+            trim_surface_cl=best_trim_cl,
+            static_margin_percent=final_stability.static_margin_percent,
+            target_static_margin_percent=target_static_margin_percent,
+            warnings=warnings + final_stability.warnings,
+        )
+
+    def _primary_trim_surface(self):
+        trim_roles = {"horizontal_tail", "canard", "stabilator"}
+        for surface in self.aircraft.surfaces:
+            role = surface.role.value if hasattr(surface.role, "value") else str(surface.role)
+            if surface.active and role in trim_roles and surface.analysis_settings.active_in_aero:
+                return surface
+        return None
+
+    def _set_surface_x(self, surface, x_m: float) -> None:
+        _x, y, z = surface.transform.origin_m
+        surface.transform = SurfaceTransform(
+            origin_m=(float(x_m), y, z),
+            orientation_euler_deg=surface.transform.orientation_euler_deg,
+            parent_uid=surface.transform.parent_uid,
+        )
+
+    def _alpha_for_target_cl(
+        self,
+        airspeed_mps: float,
+        rho_kg_m3: float,
+        alpha_bounds_deg: tuple[float, float],
+    ) -> float:
+        target_cl = _project_mass_kg(self.aircraft) * 9.80665 / (
+            0.5 * rho_kg_m3 * max(0.1, airspeed_mps) ** 2 * max(self.aircraft.reference.reference_area_m2, 1e-9)
+        )
+        best_alpha = alpha_bounds_deg[0]
+        best_err = float("inf")
+        for i in range(81):
+            alpha = alpha_bounds_deg[0] + (alpha_bounds_deg[1] - alpha_bounds_deg[0]) * i / 80.0
+            result = self.run(alpha, airspeed_mps=airspeed_mps, rho_kg_m3=rho_kg_m3)
+            err = abs(result.CL - target_cl)
+            if err < best_err:
+                best_err = err
+                best_alpha = alpha
+        return best_alpha
+
     def _surface_contribution(
         self,
         surface,
@@ -266,6 +436,7 @@ class MultiSurfaceAeroService:
         effective_alpha = alpha_deg + surface.incidence_deg - settings.zero_lift_aoa_deg
         control_effect = _pitch_control_effect(surface, control_deflections)
         cl = settings.cl_alpha_per_deg * (effective_alpha + control_effect)
+        cl, convention_warning = _apply_trim_lift_convention(cl, settings.trim_lift_direction)
         ar = geom.span_m**2 / max(geom.area_m2, 1e-9)
         e = max(0.1, settings.oswald_efficiency)
         cd = settings.cd0 + cl * cl / (pi * max(ar, 0.1) * e)
@@ -276,6 +447,8 @@ class MultiSurfaceAeroService:
         pitch_moment = (0.0, cm * q * geom.area_m2 * geom.mean_aerodynamic_chord_m, 0.0)
         moment = _add(aero_moment, pitch_moment)
         warnings = list(settings.warnings)
+        if convention_warning:
+            warnings.append(f"{surface.name} lift was limited by its '{settings.trim_lift_direction}' trim-lift convention.")
         if abs(cl) > 0.9 * max(0.1, settings.cl_max):
             warnings.append(f"{surface.name} CL is near or above the configured CLmax.")
         return SurfaceAeroContribution(
@@ -318,6 +491,32 @@ def _pitch_control_effect(surface, control_deflections: dict[str, float]) -> flo
         if cs.surface_type.lower() in ("elevon", "elevator", "stabilator"):
             effect += 0.35 * float(control_deflections.get(cs.name, control_deflections.get(f"{cs.name}_pitch", 0.0)))
     return effect
+
+
+def _surface_average_cl(result: AircraftAeroResult, surface_uid: str) -> float:
+    cls = [c.CL for c in result.surface_contributions if c.surface_uid == surface_uid]
+    if not cls:
+        return 0.0
+    return sum(cls) / len(cls)
+
+
+def _trim_lift_sign_allowed(trim_cl: float | None, direction: str) -> bool:
+    if trim_cl is None:
+        return False
+    if direction == "positive":
+        return trim_cl >= -1e-6
+    if direction == "negative":
+        return trim_cl <= 1e-6
+    return True
+
+
+def _apply_trim_lift_convention(cl: float, direction: str) -> tuple[float, bool]:
+    convention = str(direction or "auto").lower()
+    if convention == "negative" and cl > 0.0:
+        return 0.0, True
+    if convention == "positive" and cl < 0.0:
+        return 0.0, True
+    return cl, False
 
 
 def _project_mass_kg(project: AircraftProject) -> float:

@@ -6,6 +6,10 @@ from core.aircraft import (
     BodyEnvelope,
     BodyObject,
     MassItem,
+    LiftingSurface,
+    SurfaceAnalysisSettings,
+    SurfaceRole,
+    SymmetryMode,
     canard_rc_aircraft_preset,
     conventional_rc_aircraft_preset,
     twin_fin_rc_aircraft_preset,
@@ -17,6 +21,7 @@ from core.structures import StructuralElement, StructuralElementType, Structural
 from services.aircraft import MultiSurfaceAeroService, analyze_conceptual_structure, compute_mass_balance
 from services.aircraft.body import analyze_bodies
 from services.cpacs import CPACSAdapter, OptionalTiGLService
+from services.geometry import AeroSandboxService
 
 
 class AircraftPhaseExitCriteriaTests(unittest.TestCase):
@@ -37,8 +42,36 @@ class AircraftPhaseExitCriteriaTests(unittest.TestCase):
             self.assertTrue(abs(result.CL) > 0.01)
             trim = MultiSurfaceAeroService(aircraft).trim(airspeed_mps=18.0)
             self.assertIn(trim.exists, (True, False))
-            stability = MultiSurfaceAeroService(aircraft).stability(airspeed_mps=18.0)
-            self.assertIsNotNone(stability.dCm_dAlpha_per_deg)
+        stability = MultiSurfaceAeroService(aircraft).stability(airspeed_mps=18.0)
+        self.assertIsNotNone(stability.dCm_dAlpha_per_deg)
+
+    def test_trim_surface_adjustment_moves_tail_and_sets_incidence(self):
+        aircraft = conventional_rc_aircraft_preset()
+        tail = next(s for s in aircraft.surfaces if s.uid == "horizontal_tail")
+        original_x = tail.transform.origin_m[0]
+        result = MultiSurfaceAeroService(aircraft).optimize_trim_surface(
+            target_static_margin_percent=8.0,
+            target_cm=0.0,
+            airspeed_mps=18.0,
+        )
+        self.assertEqual(result.surface_uid, "horizontal_tail")
+        self.assertIsNotNone(result.static_margin_percent)
+        self.assertIsNotNone(result.cm)
+        self.assertLessEqual(result.trim_surface_cl, 0.0)
+        self.assertEqual(tail.analysis_settings.trim_lift_direction, "negative")
+        aero = MultiSurfaceAeroService(aircraft).run(alpha_deg=4.0, airspeed_mps=18.0)
+        tail_cls = [c.CL for c in aero.surface_contributions if c.surface_uid == "horizontal_tail"]
+        self.assertTrue(tail_cls)
+        self.assertTrue(all(cl <= 0.0 for cl in tail_cls))
+        self.assertTrue(abs(tail.transform.origin_m[0] - original_x) > 1e-9 or abs(tail.incidence_deg) > 1e-9)
+
+    def test_twist_optimizer_returns_root_relative_bounded_twist(self):
+        project = Project()
+        project.wing.planform.max_tip_twist_deg = 3.0
+        service = AeroSandboxService(project)
+        twist = service._normalize_and_limit_twist([13.7, 4.0, -17.0])
+        self.assertAlmostEqual(twist[0], 0.0)
+        self.assertLessEqual(max(abs(v) for v in twist), 3.0 + 1e-9)
 
     def test_chordwise_lift_distribution_planform_modes_preserve_area(self):
         linear = PlanformGeometry(wing_area_m2=1.0, aspect_ratio=6.0, taper_ratio=0.5)
@@ -65,6 +98,37 @@ class AircraftPhaseExitCriteriaTests(unittest.TestCase):
         self.assertEqual(elliptical.leading_edge_offset_at_span_fraction(eta), 0.0)
         elliptical.split_chord_distribution_offsets = True
         self.assertAlmostEqual(elliptical.leading_edge_offset_at_span_fraction(eta), -0.5 * (shifted - baseline))
+
+    def test_multi_main_wing_and_per_surface_lift_distribution_are_preserved(self):
+        project = Project()
+        project.aircraft.surfaces.append(
+            LiftingSurface(
+                uid="main_wing_2",
+                name="Second Main Wing",
+                role=SurfaceRole.MAIN_WING,
+                symmetry=SymmetryMode.MIRRORED_ABOUT_XZ,
+                planform=PlanformGeometry(wing_area_m2=0.2, aspect_ratio=5.0),
+            )
+        )
+        tail = LiftingSurface(
+            uid="horizontal_tail",
+            name="Horizontal Tail",
+            role=SurfaceRole.HORIZONTAL_TAIL,
+            symmetry=SymmetryMode.MIRRORED_ABOUT_XZ,
+            planform=PlanformGeometry(wing_area_m2=0.1, aspect_ratio=4.0),
+            analysis_settings=SurfaceAnalysisSettings(design_cl=0.25, lift_distribution="elliptical"),
+        )
+        project.aircraft.surfaces.append(tail)
+        project.sync_legacy_wing_to_aircraft()
+
+        main_wings = [s for s in project.aircraft.surfaces if s.role == SurfaceRole.MAIN_WING or s.role == SurfaceRole.MAIN_WING.value]
+        self.assertGreaterEqual(len(main_wings), 2)
+        self.assertEqual(tail.analysis_settings.lift_distribution, "elliptical")
+
+        loaded = Project.from_dict(project.to_dict())
+        loaded_tail = next(s for s in loaded.aircraft.surfaces if s.uid == "horizontal_tail")
+        self.assertEqual(loaded_tail.analysis_settings.lift_distribution, "elliptical")
+        self.assertAlmostEqual(loaded_tail.analysis_settings.design_cl, 0.25)
 
     def test_phase_3_generic_structure_supports_tube_spar_and_bracing(self):
         aircraft = conventional_rc_aircraft_preset()

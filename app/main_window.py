@@ -69,12 +69,25 @@ class MainWindow(QMainWindow):
         self.tab_mission = MissionTab(self.project)
         self.tab_structure = StructureTab(self.project)
         self.tab_export = ExportTab(self.project)
+        self.tab_analysis.twist_tab.dataChanged.connect(self._on_project_data_changed)
         
         self.tabs.addTab(self.tab_geometry, "Geometry")
         self.tabs.addTab(self.tab_analysis, "Analysis")
         self.tabs.addTab(self.tab_mission, "Mission")
         self.tabs.addTab(self.tab_structure, "Structure")
         self.tabs.addTab(self.tab_export, "Export")
+        self.tabs.currentChanged.connect(self._on_top_tab_changed)
+
+    def _on_top_tab_changed(self, index: int):
+        widget = self.tabs.widget(index)
+        if widget is not None and hasattr(widget, "update_from_project"):
+            widget.project = self.project
+            widget.update_from_project()
+
+    def _on_project_data_changed(self):
+        self.tab_geometry.project = self.project
+        self.tab_geometry.update_from_project()
+        self.tab_analysis.project = self.project
         
     def refresh_tabs(self):
         """Notify tabs to update their UI from the project state."""

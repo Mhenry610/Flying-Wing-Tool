@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QHeaderView,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -29,6 +30,8 @@ from PyQt6.QtWidgets import (
 )
 
 from core.state import Project
+from core.aircraft import MassItem
+from services.aircraft import apply_mass_balance_to_reference, compute_mass_balance
 from services.mission.apc_map import APCMap
 from services.mission.motor import MotorProp
 from services.mission.planner import AeroConfig, MissionSegment, evaluate_mission
@@ -455,6 +458,41 @@ class MissionTab(QTabWidget):
 
         layout.addLayout(res_layout)
 
+        return widget
+
+    def _create_mass_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        controls = QHBoxLayout()
+        add_btn = QPushButton("Add Item")
+        add_btn.clicked.connect(self._add_mass_item)
+        controls.addWidget(add_btn)
+        remove_btn = QPushButton("Remove Selected")
+        remove_btn.clicked.connect(self._remove_mass_item)
+        controls.addWidget(remove_btn)
+        apply_btn = QPushButton("Apply CG to Aircraft Reference")
+        apply_btn.clicked.connect(self._apply_mass_cg)
+        controls.addWidget(apply_btn)
+        controls.addStretch()
+        layout.addLayout(controls)
+
+        self.mass_table = QTableWidget()
+        self.mass_table.setColumnCount(7)
+        self.mass_table.setHorizontalHeaderLabels(["Name", "Category", "Mass [kg]", "X [m]", "Y [m]", "Z [m]", "Notes"])
+        self.mass_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.mass_table.itemChanged.connect(self._on_mass_table_changed)
+        layout.addWidget(self.mass_table)
+
+        summary = QGroupBox("Mass Balance")
+        summary_form = QFormLayout(summary)
+        self.mass_total_label = QLabel("-")
+        self.mass_cg_label = QLabel("-")
+        self.mass_warning_label = QLabel("-")
+        summary_form.addRow("Total mass", self.mass_total_label)
+        summary_form.addRow("CG [m]", self.mass_cg_label)
+        summary_form.addRow("Warnings", self.mass_warning_label)
+        layout.addWidget(summary)
         return widget
 
     def _update_mu(self):
@@ -1645,9 +1683,96 @@ class MissionTab(QTabWidget):
                 "Export complete:\n" + "\n".join(details),
             )
 
+    def _mass_categories(self) -> List[str]:
+        return [
+            "battery", "motor", "esc", "servo", "payload", "receiver",
+            "autopilot", "structure", "fuselage", "landing_gear", "other",
+        ]
+
+    def _refresh_mass_table(self):
+        if not hasattr(self, "mass_table") or self.project is None:
+            return
+        self.mass_table.blockSignals(True)
+        self.mass_table.setRowCount(len(self.project.aircraft.mass_items))
+        for row, item in enumerate(self.project.aircraft.mass_items):
+            values = [
+                item.name,
+                item.category,
+                item.mass_kg,
+                item.cg_m[0],
+                item.cg_m[1],
+                item.cg_m[2],
+                item.notes,
+            ]
+            for col, value in enumerate(values):
+                text = f"{value:.4f}" if isinstance(value, float) else str(value)
+                self.mass_table.setItem(row, col, QTableWidgetItem(text))
+        self.mass_table.blockSignals(False)
+        self._update_mass_summary()
+
+    def _sync_mass_table(self):
+        if not hasattr(self, "mass_table") or self.project is None:
+            return
+        items = []
+        categories = set(self._mass_categories())
+        for row in range(self.mass_table.rowCount()):
+            try:
+                name = _table_text(self.mass_table, row, 0, f"Mass {row + 1}")
+                category = _table_text(self.mass_table, row, 1, "other").lower()
+                if category not in categories:
+                    category = "other"
+                mass_kg = max(0.0, float(_table_text(self.mass_table, row, 2, "0")))
+                cg = (
+                    float(_table_text(self.mass_table, row, 3, "0")),
+                    float(_table_text(self.mass_table, row, 4, "0")),
+                    float(_table_text(self.mass_table, row, 5, "0")),
+                )
+                uid = _uid_from_name(name, row)
+                items.append(MassItem(uid=uid, name=name, mass_kg=mass_kg, cg_m=cg, category=category, notes=_table_text(self.mass_table, row, 6, "")))
+            except ValueError:
+                continue
+        self.project.aircraft.mass_items = items
+        self._update_mass_summary()
+
+    def _on_mass_table_changed(self, _item):
+        self._sync_mass_table()
+
+    def _add_mass_item(self):
+        if self.project is None:
+            return
+        idx = len(self.project.aircraft.mass_items) + 1
+        self.project.aircraft.mass_items.append(
+            MassItem(uid=f"mass_{idx}", name=f"Mass {idx}", mass_kg=0.1, cg_m=self.project.aircraft.reference.cg_m, category="other")
+        )
+        self._refresh_mass_table()
+
+    def _remove_mass_item(self):
+        if self.project is None:
+            return
+        row = self.mass_table.currentRow()
+        if 0 <= row < len(self.project.aircraft.mass_items):
+            self.project.aircraft.mass_items.pop(row)
+            self._refresh_mass_table()
+
+    def _apply_mass_cg(self):
+        if self.project is None:
+            return
+        self._sync_mass_table()
+        balance = apply_mass_balance_to_reference(self.project.aircraft)
+        self._update_mass_summary(balance)
+
+    def _update_mass_summary(self, balance=None):
+        if not hasattr(self, "mass_total_label") or self.project is None:
+            return
+        balance = balance or compute_mass_balance(self.project.aircraft)
+        self.mass_total_label.setText(f"{balance.total_mass_kg:.4f} kg")
+        self.mass_cg_label.setText(f"({balance.cg_m[0]:.4f}, {balance.cg_m[1]:.4f}, {balance.cg_m[2]:.4f})")
+        self.mass_warning_label.setText("; ".join(balance.warnings) if balance.warnings else "-")
+
     def update_from_project(self):
         if self.project is None:
             return
+        self._refresh_mass_table()
         gui_settings = getattr(self.project.mission, "gui_settings", None)
         if gui_settings:
             self._apply_gui_settings(gui_settings)
@@ -1674,6 +1799,7 @@ class MissionTab(QTabWidget):
     def sync_to_project(self):
         if self.project is None:
             return
+        self._sync_mass_table()
         self.project.mission.gui_settings = self._collect_gui_settings()
 
     def _collect_gui_settings(self) -> Dict[str, Any]:
@@ -1874,3 +2000,13 @@ class MissionTab(QTabWidget):
             QMessageBox.warning(
                 self, "Import Error", f"Failed to import geometry data: {e}"
             )
+
+
+def _table_text(table: QTableWidget, row: int, col: int, default: Any) -> str:
+    item = table.item(row, col)
+    return item.text().strip() if item and item.text().strip() else str(default)
+
+
+def _uid_from_name(name: str, row: int) -> str:
+    text = re.sub(r"[^a-zA-Z0-9_]+", "_", name.strip().lower()).strip("_")
+    return text or f"mass_{row + 1}"

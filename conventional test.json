@@ -1,0 +1,916 @@
+{
+  "schema_version": 2,
+  "wing": {
+    "name": "Conventional RC Aircraft",
+    "planform": {
+      "wing_area_m2": 1.32,
+      "aspect_ratio": 7.0,
+      "taper_ratio": 0.55,
+      "chord_distribution_mode": "linear_taper",
+      "chord_distribution_tip_floor_percent": 5.0,
+      "split_chord_distribution_offsets": false,
+      "sweep_le_deg": 3.0,
+      "dihedral_deg": 3.0,
+      "elevon_root_span_percent": 40.0,
+      "elevon_root_chord_percent": 35.0,
+      "elevon_tip_chord_percent": 25.0,
+      "front_spar_root_percent": 20.0,
+      "front_spar_tip_percent": 20.0,
+      "rear_spar_root_percent": 65.0,
+      "rear_spar_tip_percent": 65.0,
+      "rear_spar_span_percent": 100.0,
+      "rear_spar_elevon_root_percent": 35.0,
+      "center_chord_extension_percent": 0.0,
+      "center_section_span_percent": 0.0,
+      "center_extension_linear": false,
+      "snap_to_sections": false,
+      "bwb_blend_span_percent": 10.0,
+      "bwb_dihedral_deg": 0.0,
+      "body_sections": [],
+      "control_surfaces": [
+        {
+          "name": "Aileron",
+          "surface_type": "Aileron",
+          "span_start_percent": 55.0,
+          "span_end_percent": 95.0,
+          "chord_start_percent": 72.0,
+          "chord_end_percent": 72.0,
+          "hinge_rel_height": 0.0
+        }
+      ],
+      "spar_material_name": "Balsa (Light, 6 lb/ft\u00b3)",
+      "skin_material_name": "Balsa (Light, 6 lb/ft\u00b3)",
+      "rib_count": 10,
+      "spar_thickness_mm": 3.0,
+      "skin_thickness_mm": 1.5,
+      "rib_thickness_mm": 3.0,
+      "rib_lightening_fraction": 0.4,
+      "lightening_hole_margin_mm": 10.0,
+      "lightening_hole_shape": "circular",
+      "factor_of_safety": 1.5,
+      "max_tip_deflection_percent": 15.0,
+      "max_tip_twist_deg": 3.0,
+      "spar_grain_spanwise": true,
+      "skin_grain_spanwise": true,
+      "stringer_count": 0,
+      "stringer_height_mm": 10.0,
+      "stringer_thickness_mm": 1.5,
+      "stringer_material_name": "Balsa (Light, 6 lb/ft\u00b3)",
+      "skin_boundary_condition": "semi_restrained",
+      "include_curvature_effect": true,
+      "post_buckling_enabled": false,
+      "spar_cap_width_mm": 10.0
+    },
+    "twist_trim": {
+      "gross_takeoff_weight_kg": 25.0,
+      "cruise_altitude_m": 2000.0,
+      "cm0_root": -0.024,
+      "cm0_tip": -0.024,
+      "zero_lift_aoa_root_deg": -1.13,
+      "zero_lift_aoa_tip_deg": -1.13,
+      "cl_alpha_root_per_deg": 0.1081,
+      "cl_alpha_tip_per_deg": 0.1081,
+      "design_cl": 0.45,
+      "lift_distribution": "elliptical",
+      "structural_spanload_model": "vlm",
+      "static_margin_percent": 8.0,
+      "estimated_cl_max": 1.2,
+      "estimated_cl_max_speed": 0.35
+    },
+    "airfoil": {
+      "bwb_airfoil": "naca2412",
+      "root_airfoil": "naca2412",
+      "tip_airfoil": "naca0009",
+      "num_sections": 13
+    },
+    "optimized_twist_deg": [
+      0.0,
+      -0.010434814224650042,
+      -0.041960108450191734,
+      -0.09526249034443672,
+      -0.17157287525380946,
+      -0.27282197134107156,
+      -0.40192378864668393,
+      -0.563301413797759,
+      -0.7639320225002095,
+      -1.015686516701557,
+      -1.3416876048223005,
+      -1.80104211917182,
+      -3.0
+    ]
+  },
+  "aircraft": {
+    "schema_version": 2,
+    "metadata": {
+      "name": "Conventional RC Aircraft",
+      "created_with": "FWT_V1-0",
+      "notes": ""
+    },
+    "requirements": {
+      "payload_mass_kg": 0.0,
+      "cruise_speed_mps": null,
+      "stall_speed_mps": null,
+      "endurance_min": null,
+      "notes": ""
+    },
+    "reference": {
+      "reference_area_m2": 0.7,
+      "reference_span_m": 2.2135943621178655,
+      "reference_chord_m": 0.32511241709119226,
+      "moment_reference_m": [
+        0.18,
+        0.0,
+        0.0
+      ],
+      "cg_m": [
+        0.18,
+        0.0,
+        0.0
+      ]
+    },
+    "surfaces": [
+      {
+        "uid": "main_wing",
+        "name": "Main Wing",
+        "role": "main_wing",
+        "active": true,
+        "transform": {
+          "origin_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orientation_euler_deg": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "parent_uid": null
+        },
+        "symmetry": "mirrored_about_xz",
+        "local_span_axis": "+Y",
+        "planform": {
+          "wing_area_m2": 1.32,
+          "aspect_ratio": 7.0,
+          "taper_ratio": 0.55,
+          "chord_distribution_mode": "linear_taper",
+          "chord_distribution_tip_floor_percent": 5.0,
+          "split_chord_distribution_offsets": false,
+          "sweep_le_deg": 3.0,
+          "dihedral_deg": 3.0,
+          "elevon_root_span_percent": 40.0,
+          "elevon_root_chord_percent": 35.0,
+          "elevon_tip_chord_percent": 25.0,
+          "front_spar_root_percent": 20.0,
+          "front_spar_tip_percent": 20.0,
+          "rear_spar_root_percent": 65.0,
+          "rear_spar_tip_percent": 65.0,
+          "rear_spar_span_percent": 100.0,
+          "rear_spar_elevon_root_percent": 35.0,
+          "center_chord_extension_percent": 0.0,
+          "center_section_span_percent": 0.0,
+          "center_extension_linear": false,
+          "snap_to_sections": false,
+          "bwb_blend_span_percent": 10.0,
+          "bwb_dihedral_deg": 0.0,
+          "body_sections": [],
+          "control_surfaces": [
+            {
+              "name": "Aileron",
+              "surface_type": "Aileron",
+              "span_start_percent": 55.0,
+              "span_end_percent": 95.0,
+              "chord_start_percent": 72.0,
+              "chord_end_percent": 72.0,
+              "hinge_rel_height": 0.0
+            }
+          ],
+          "spar_material_name": "Balsa (Light, 6 lb/ft\u00b3)",
+          "skin_material_name": "Balsa (Light, 6 lb/ft\u00b3)",
+          "rib_count": 10,
+          "spar_thickness_mm": 3.0,
+          "skin_thickness_mm": 1.5,
+          "rib_thickness_mm": 3.0,
+          "rib_lightening_fraction": 0.4,
+          "lightening_hole_margin_mm": 10.0,
+          "lightening_hole_shape": "circular",
+          "factor_of_safety": 1.5,
+          "max_tip_deflection_percent": 15.0,
+          "max_tip_twist_deg": 3.0,
+          "spar_grain_spanwise": true,
+          "skin_grain_spanwise": true,
+          "stringer_count": 0,
+          "stringer_height_mm": 10.0,
+          "stringer_thickness_mm": 1.5,
+          "stringer_material_name": "Balsa (Light, 6 lb/ft\u00b3)",
+          "skin_boundary_condition": "semi_restrained",
+          "include_curvature_effect": true,
+          "post_buckling_enabled": false,
+          "spar_cap_width_mm": 10.0
+        },
+        "airfoils": {
+          "bwb_airfoil": "naca2412",
+          "root_airfoil": "naca2412",
+          "tip_airfoil": "naca0009",
+          "num_sections": 13
+        },
+        "twist": {
+          "twist_deg": [
+            0.0,
+            -0.010434814224650042,
+            -0.041960108450191734,
+            -0.09526249034443672,
+            -0.17157287525380946,
+            -0.27282197134107156,
+            -0.40192378864668393,
+            -0.563301413797759,
+            -0.7639320225002095,
+            -1.015686516701557,
+            -1.3416876048223005,
+            -1.80104211917182,
+            -3.0
+          ]
+        },
+        "incidence_deg": 0.0,
+        "control_surfaces": [
+          {
+            "name": "Aileron",
+            "surface_type": "Aileron",
+            "span_start_percent": 55.0,
+            "span_end_percent": 95.0,
+            "chord_start_percent": 72.0,
+            "chord_end_percent": 72.0,
+            "hinge_rel_height": 0.0
+          }
+        ],
+        "structural_layout": {
+          "uid": "main_wing_structure",
+          "coordinate_system": "surface_local",
+          "elements": [],
+          "joints": [],
+          "hardpoints": [],
+          "load_cases": [
+            {
+              "uid": "main_wing_structure_limit",
+              "name": "Legacy limit load",
+              "load_factor_g": 1.0,
+              "dynamic_pressure_pa": null
+            }
+          ],
+          "analysis_settings": {
+            "fidelity": "legacy_wingbox",
+            "include_buckling": true,
+            "warnings_enabled": true
+          }
+        },
+        "analysis_settings": {
+          "cl_alpha_per_deg": 0.1081,
+          "zero_lift_aoa_deg": -1.13,
+          "cm0": -0.024,
+          "cd0": 0.018,
+          "oswald_efficiency": 0.82,
+          "cl_max": 1.2,
+          "design_cl": 0.45,
+          "lift_distribution": "elliptical",
+          "trim_lift_direction": "auto",
+          "active_in_aero": true,
+          "warnings": []
+        },
+        "external_refs": {
+          "legacy_wing_project": "FlyingWingProject"
+        }
+      },
+      {
+        "uid": "horizontal_tail",
+        "name": "Horizontal Tail",
+        "role": "horizontal_tail",
+        "active": true,
+        "transform": {
+          "origin_m": [
+            0.584,
+            0.0,
+            0.02
+          ],
+          "orientation_euler_deg": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "parent_uid": null
+        },
+        "symmetry": "mirrored_about_xz",
+        "local_span_axis": "+Y",
+        "planform": {
+          "wing_area_m2": 0.16,
+          "aspect_ratio": 4.0,
+          "taper_ratio": 0.8,
+          "chord_distribution_mode": "linear_taper",
+          "chord_distribution_tip_floor_percent": 5.0,
+          "split_chord_distribution_offsets": false,
+          "sweep_le_deg": 0.0,
+          "dihedral_deg": 2.0,
+          "elevon_root_span_percent": 40.0,
+          "elevon_root_chord_percent": 35.0,
+          "elevon_tip_chord_percent": 25.0,
+          "front_spar_root_percent": 20.0,
+          "front_spar_tip_percent": 20.0,
+          "rear_spar_root_percent": 65.0,
+          "rear_spar_tip_percent": 65.0,
+          "rear_spar_span_percent": 100.0,
+          "rear_spar_elevon_root_percent": 35.0,
+          "center_chord_extension_percent": 0.0,
+          "center_section_span_percent": 0.0,
+          "center_extension_linear": false,
+          "snap_to_sections": false,
+          "bwb_blend_span_percent": 10.0,
+          "bwb_dihedral_deg": 0.0,
+          "body_sections": [],
+          "control_surfaces": [
+            {
+              "name": "Elevator",
+              "surface_type": "Elevator",
+              "span_start_percent": 0.0,
+              "span_end_percent": 100.0,
+              "chord_start_percent": 70.0,
+              "chord_end_percent": 70.0,
+              "hinge_rel_height": 0.0
+            }
+          ],
+          "spar_material_name": "Balsa (Medium, 10 lb/ft\u00b3)",
+          "skin_material_name": "Balsa (Medium, 10 lb/ft\u00b3)",
+          "rib_count": 10,
+          "spar_thickness_mm": 3.0,
+          "skin_thickness_mm": 1.5,
+          "rib_thickness_mm": 3.0,
+          "rib_lightening_fraction": 0.4,
+          "lightening_hole_margin_mm": 10.0,
+          "lightening_hole_shape": "circular",
+          "factor_of_safety": 1.5,
+          "max_tip_deflection_percent": 15.0,
+          "max_tip_twist_deg": 3.0,
+          "spar_grain_spanwise": true,
+          "skin_grain_spanwise": true,
+          "stringer_count": 0,
+          "stringer_height_mm": 10.0,
+          "stringer_thickness_mm": 1.5,
+          "stringer_material_name": "Balsa (Medium, 10 lb/ft\u00b3)",
+          "skin_boundary_condition": "semi_restrained",
+          "include_curvature_effect": true,
+          "post_buckling_enabled": false,
+          "spar_cap_width_mm": 10.0
+        },
+        "airfoils": {
+          "bwb_airfoil": "naca2412",
+          "root_airfoil": "naca0009",
+          "tip_airfoil": "naca0009",
+          "num_sections": 13
+        },
+        "twist": {
+          "twist_deg": [
+            0.0,
+            0.01,
+            0.042,
+            0.095,
+            0.172,
+            0.273,
+            0.402,
+            0.563,
+            0.764,
+            1.016,
+            1.342,
+            1.801,
+            3.0
+          ]
+        },
+        "incidence_deg": -1.5,
+        "control_surfaces": [
+          {
+            "name": "Elevator",
+            "surface_type": "Elevator",
+            "span_start_percent": 0.0,
+            "span_end_percent": 100.0,
+            "chord_start_percent": 70.0,
+            "chord_end_percent": 70.0,
+            "hinge_rel_height": 0.0
+          }
+        ],
+        "structural_layout": {
+          "uid": "structure",
+          "coordinate_system": "surface_local",
+          "elements": [],
+          "joints": [],
+          "hardpoints": [],
+          "load_cases": [],
+          "analysis_settings": {
+            "fidelity": "conceptual",
+            "include_buckling": false,
+            "warnings_enabled": true
+          }
+        },
+        "analysis_settings": {
+          "cl_alpha_per_deg": 0.075,
+          "zero_lift_aoa_deg": 0.0,
+          "cm0": 0.0,
+          "cd0": 0.015,
+          "oswald_efficiency": 0.82,
+          "cl_max": 1.1,
+          "design_cl": 0.45,
+          "lift_distribution": "elliptical",
+          "trim_lift_direction": "negative",
+          "active_in_aero": true,
+          "warnings": []
+        },
+        "external_refs": {}
+      },
+      {
+        "uid": "vertical_tail",
+        "name": "Vertical Tail",
+        "role": "vertical_tail",
+        "active": true,
+        "transform": {
+          "origin_m": [
+            0.9,
+            0.0,
+            0.04
+          ],
+          "orientation_euler_deg": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "parent_uid": null
+        },
+        "symmetry": "single_centerline",
+        "local_span_axis": "+Z",
+        "planform": {
+          "wing_area_m2": 0.06,
+          "aspect_ratio": 1.5,
+          "taper_ratio": 0.65,
+          "chord_distribution_mode": "linear_taper",
+          "chord_distribution_tip_floor_percent": 5.0,
+          "split_chord_distribution_offsets": false,
+          "sweep_le_deg": 15.0,
+          "dihedral_deg": 2.0,
+          "elevon_root_span_percent": 40.0,
+          "elevon_root_chord_percent": 35.0,
+          "elevon_tip_chord_percent": 25.0,
+          "front_spar_root_percent": 20.0,
+          "front_spar_tip_percent": 20.0,
+          "rear_spar_root_percent": 65.0,
+          "rear_spar_tip_percent": 65.0,
+          "rear_spar_span_percent": 100.0,
+          "rear_spar_elevon_root_percent": 35.0,
+          "center_chord_extension_percent": 0.0,
+          "center_section_span_percent": 0.0,
+          "center_extension_linear": false,
+          "snap_to_sections": false,
+          "bwb_blend_span_percent": 10.0,
+          "bwb_dihedral_deg": 0.0,
+          "body_sections": [],
+          "control_surfaces": [
+            {
+              "name": "Rudder",
+              "surface_type": "Rudder",
+              "span_start_percent": 20.0,
+              "span_end_percent": 100.0,
+              "chord_start_percent": 70.0,
+              "chord_end_percent": 70.0,
+              "hinge_rel_height": 0.0
+            }
+          ],
+          "spar_material_name": "Balsa (Medium, 10 lb/ft\u00b3)",
+          "skin_material_name": "Balsa (Medium, 10 lb/ft\u00b3)",
+          "rib_count": 10,
+          "spar_thickness_mm": 3.0,
+          "skin_thickness_mm": 1.5,
+          "rib_thickness_mm": 3.0,
+          "rib_lightening_fraction": 0.4,
+          "lightening_hole_margin_mm": 10.0,
+          "lightening_hole_shape": "circular",
+          "factor_of_safety": 1.5,
+          "max_tip_deflection_percent": 15.0,
+          "max_tip_twist_deg": 3.0,
+          "spar_grain_spanwise": true,
+          "skin_grain_spanwise": true,
+          "stringer_count": 0,
+          "stringer_height_mm": 10.0,
+          "stringer_thickness_mm": 1.5,
+          "stringer_material_name": "Balsa (Medium, 10 lb/ft\u00b3)",
+          "skin_boundary_condition": "semi_restrained",
+          "include_curvature_effect": true,
+          "post_buckling_enabled": false,
+          "spar_cap_width_mm": 10.0
+        },
+        "airfoils": {
+          "bwb_airfoil": "naca2412",
+          "root_airfoil": "naca2412",
+          "tip_airfoil": "naca0009",
+          "num_sections": 13
+        },
+        "twist": {
+          "twist_deg": []
+        },
+        "incidence_deg": 0.0,
+        "control_surfaces": [
+          {
+            "name": "Rudder",
+            "surface_type": "Rudder",
+            "span_start_percent": 20.0,
+            "span_end_percent": 100.0,
+            "chord_start_percent": 70.0,
+            "chord_end_percent": 70.0,
+            "hinge_rel_height": 0.0
+          }
+        ],
+        "structural_layout": {
+          "uid": "structure",
+          "coordinate_system": "surface_local",
+          "elements": [],
+          "joints": [],
+          "hardpoints": [],
+          "load_cases": [],
+          "analysis_settings": {
+            "fidelity": "conceptual",
+            "include_buckling": false,
+            "warnings_enabled": true
+          }
+        },
+        "analysis_settings": {
+          "cl_alpha_per_deg": 0.055,
+          "zero_lift_aoa_deg": 0.0,
+          "cm0": 0.0,
+          "cd0": 0.015,
+          "oswald_efficiency": 0.82,
+          "cl_max": 0.9,
+          "design_cl": 0.45,
+          "lift_distribution": "bell",
+          "trim_lift_direction": "auto",
+          "active_in_aero": true,
+          "warnings": []
+        },
+        "external_refs": {}
+      }
+    ],
+    "bodies": [],
+    "propulsion_systems": [],
+    "mass_items": [],
+    "mission": {},
+    "analyses": {
+      "results": {
+        "trim_surface_adjustment": {
+          "surface_uid": "horizontal_tail",
+          "moved_x_m": 0.5842485307724086,
+          "incidence_deg": -1.5,
+          "alpha_deg": -0.5250000000000004,
+          "cm": -0.002910882656832863,
+          "trim_surface_cl": -0.151875,
+          "static_margin_percent": 8.002760621086885,
+          "target_static_margin_percent": 8.0,
+          "warnings": []
+        },
+        "multi_surface_aero": {
+          "CL": 1.1064286662808547,
+          "CD": 0.10548338082093568,
+          "CY": 0.0,
+          "Cl": 0.0,
+          "Cm": -0.09196711733438939,
+          "Cn": 0.0,
+          "force_n": [
+            -18.09039981079047,
+            0.0,
+            189.75251626716658
+          ],
+          "moment_nm": [
+            0.0,
+            -5.127790285327984,
+            0.0
+          ],
+          "surface_contributions": [
+            {
+              "surface_uid": "main_wing",
+              "instance_uid": "main_wing_right",
+              "CL": 0.5540152018156046,
+              "CD": 0.0520417277315903,
+              "CM": -0.024324512152227737,
+              "force_n": [
+                -8.415147374198153,
+                0.0,
+                89.58425813358328
+              ],
+              "moment_nm": [
+                68.0781422252138,
+                0.46749948705572364,
+                6.394958352309362
+              ],
+              "alpha_deg": 4.0,
+              "beta_deg": 0.0,
+              "reynolds": null,
+              "warnings": []
+            },
+            {
+              "surface_uid": "main_wing",
+              "instance_uid": "main_wing_left",
+              "CL": 0.5540152018156046,
+              "CD": 0.0520417277315903,
+              "CM": -0.024324512152227737,
+              "force_n": [
+                -8.415147374198153,
+                0.0,
+                89.58425813358328
+              ],
+              "moment_nm": [
+                -68.0781422252138,
+                0.46749948705572364,
+                -6.394958352309362
+              ],
+              "alpha_deg": 4.0,
+              "beta_deg": 0.0,
+              "reynolds": null,
+              "warnings": []
+            },
+            {
+              "surface_uid": "horizontal_tail",
+              "instance_uid": "horizontal_tail_right",
+              "CL": 0.1875,
+              "CD": 0.021823525570822493,
+              "CM": 0.0,
+              "force_n": [
+                -0.4277411011881209,
+                0.0,
+                3.6750000000000007
+              ],
+              "moment_nm": [
+                0.7350000000000002,
+                -1.681661755131218,
+                0.08554822023762419
+              ],
+              "alpha_deg": 4.0,
+              "beta_deg": 0.0,
+              "reynolds": null,
+              "warnings": []
+            },
+            {
+              "surface_uid": "horizontal_tail",
+              "instance_uid": "horizontal_tail_left",
+              "CL": 0.1875,
+              "CD": 0.021823525570822493,
+              "CM": 0.0,
+              "force_n": [
+                -0.4277411011881209,
+                0.0,
+                3.6750000000000007
+              ],
+              "moment_nm": [
+                -0.7350000000000002,
+                -1.681661755131218,
+                -0.08554822023762419
+              ],
+              "alpha_deg": 4.0,
+              "beta_deg": 0.0,
+              "reynolds": null,
+              "warnings": []
+            },
+            {
+              "surface_uid": "vertical_tail",
+              "instance_uid": "vertical_tail_center",
+              "CL": 0.22,
+              "CD": 0.027525364627069487,
+              "CM": 0.0,
+              "force_n": [
+                -0.40462286001792147,
+                0.0,
+                3.2340000000000004
+              ],
+              "moment_nm": [
+                0.0,
+                -2.699465749176996,
+                0.0
+              ],
+              "alpha_deg": 4.0,
+              "beta_deg": 0.0,
+              "reynolds": null,
+              "warnings": []
+            }
+          ],
+          "warnings": [],
+          "references": [
+            {
+              "label": "NASA Glenn, lift/drag coefficient reference-area convention",
+              "url": "https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/size-effects-on-drag/"
+            },
+            {
+              "label": "NASA Glenn, induced drag coefficient relation",
+              "url": "https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/induced-drag-coefficient/"
+            }
+          ]
+        },
+        "multi_surface_trim": {
+          "exists": true,
+          "alpha_deg": -0.5250000000000004,
+          "required_control_deflection_deg": 0.0,
+          "remaining_control_margin_deg": 25.0,
+          "surface_cls": {
+            "main_wing_right": 0.06505348313829114,
+            "main_wing_left": 0.06505348313829114,
+            "horizontal_tail_right": -0.151875,
+            "horizontal_tail_left": -0.151875,
+            "vertical_tail_center": -0.02887500000000002
+          },
+          "stall_margins": {
+            "main_wing_right": 1.1349465168617088,
+            "main_wing_left": 1.1349465168617088,
+            "horizontal_tail_right": 0.9481250000000001,
+            "horizontal_tail_left": 0.9481250000000001,
+            "vertical_tail_center": 0.871125
+          },
+          "cg_m": [
+            0.18,
+            0.0,
+            0.0
+          ],
+          "warnings": []
+        },
+        "multi_surface_stability": {
+          "dCm_dAlpha_per_deg": -0.02130577488468767,
+          "neutral_point_x_m": 0.21070059857628745,
+          "static_margin_percent": 9.443071676858194,
+          "control_authority_margin": null,
+          "warnings": []
+        }
+      },
+      "warnings": []
+    },
+    "exports": {
+      "cpacs_version_target": "3.5",
+      "last_export_path": null
+    },
+    "external_refs": {
+      "refs": {}
+    }
+  },
+  "mission": {
+    "segments": [],
+    "aero_config": {
+      "cl_cruise": 0.5,
+      "cd_wing": 0.0,
+      "cd_fuse": 0.0,
+      "cd_tail": 0.0,
+      "s_wing_m2": null,
+      "s_fuse_m2": 0.0,
+      "s_tail_m2": 0.0,
+      "cl_max": 1.6,
+      "mu_roll": 0.03
+    },
+    "motor": {
+      "KV_rpm_per_V": 1000.0,
+      "Ri_mOhm": 100.0,
+      "Io_A": 0.5,
+      "V_at_Io": null
+    },
+    "payload_mass_kg": 0.0,
+    "gui_settings": {
+      "weight_kg": 12.5,
+      "batt_chem": "LiPo (3.7V)",
+      "batt_series": 6,
+      "batt_parallel": 1,
+      "batt_capacity_mAh": 5000.0,
+      "batt_c_rating": 30.0,
+      "motor_kv": 920.0,
+      "motor_ri_mohm": 60.0,
+      "motor_io": 0.7,
+      "motor_vio": 12.0,
+      "motor_count": 1,
+      "prop_diam_in": 12.0,
+      "prop_pitch_in": 6.0,
+      "prop_family": "APC Standard",
+      "prop_file_path": null,
+      "surface_type": "Concrete (0.02)",
+      "takeoff_dist_m": 120.0,
+      "dynamics_mode": "Planner (steady-state)",
+      "cruise_speed_mps": 40.0,
+      "cruise_alt_m": 500.0,
+      "cruise_duration": 30.0,
+      "cruise_time_unit": "s"
+    }
+  },
+  "analysis": {
+    "polars": {},
+    "twist_distribution": [],
+    "x_cg": null,
+    "performance_metrics": {},
+    "structural_analysis": {},
+    "mission_results": {},
+    "gui_settings": {
+      "selected_lifting_surface_uid": "horizontal_tail",
+      "analysis_tab": {
+        "airfoil_source": "Root Airfoil",
+        "surface_uid": "horizontal_tail",
+        "airfoil_text": "naca0009",
+        "alpha_min_deg": -5.0,
+        "alpha_max_deg": 15.0,
+        "alpha_points": 40,
+        "re_min": 10000.0,
+        "re_max": 5000000.0,
+        "re_points": 40,
+        "mach": 0.0,
+        "max_ld_enabled": true,
+        "min_cd_enabled": false,
+        "target_cl_enabled": false,
+        "target_cm_enabled": false,
+        "w_max_ld": 1.0,
+        "w_min_cd": 1.0,
+        "w_target_cl": 1.0,
+        "w_target_cm": 1.0,
+        "target_cl_value": 0.8,
+        "target_cm_value": -0.05,
+        "opt_alpha": 4.0,
+        "opt_re": 300000.0,
+        "min_tc": 0.01,
+        "optimize_alpha": true,
+        "use_optimized_airfoil": true
+      },
+      "selected_twist_trim_surface_uid": "main_wing",
+      "structure_tab": {
+        "advanced_visible": false,
+        "flight_condition": "cruise",
+        "load_factor": 2.5,
+        "exaggerate_deformation": false,
+        "exaggeration_factor": 10.0,
+        "user_mat_E1_GPa": 3.5,
+        "user_mat_E2_GPa": 0.2,
+        "user_mat_G12_GPa": 0.25,
+        "user_mat_density_kg_m3": 160.0,
+        "user_mat_sigma_c_MPa": 10.0,
+        "user_mat_sigma_t_MPa": 14.0
+      },
+      "export_tab": {
+        "use_spline_wing_step": true,
+        "cut_wing_for_elevon": true,
+        "elevon_angle_deg": "30.0",
+        "fixture_material_thickness_mm": 6.35,
+        "fixture_slot_clearance_mm": 0.15,
+        "fixture_add_cradle": true,
+        "fixture_tab_width_mm": 15.0,
+        "fixture_tab_spacing_mm": 80.0,
+        "dxf_add_spar_notches": true,
+        "dxf_add_stringer_cutouts": true,
+        "dxf_add_elevon_cutouts": true,
+        "dxf_add_lightening_holes": false,
+        "dxf_show_grain": false,
+        "dxf_label_ribs": true,
+        "dxf_label_spars": true,
+        "dxf_spar_notch_clearance_mm": 0.1,
+        "dxf_rib_notch_clearance_mm": 0.1,
+        "dxf_stringer_slot_clearance_mm": 0.2,
+        "dxf_notch_depth_percent": 50.0,
+        "dxf_sheet_width_mm": 600.0,
+        "dxf_sheet_height_mm": 300.0,
+        "dxf_part_spacing_mm": 5.0,
+        "dxf_edge_margin_mm": 10.0,
+        "dxf_allow_splitting": true,
+        "viewer_actor_prefs": {
+          "wing": {
+            "visible": true,
+            "opacity": 1.0
+          },
+          "wing_m": {
+            "visible": true,
+            "opacity": 0.5
+          },
+          "spars": {
+            "visible": true,
+            "opacity": 1.0
+          },
+          "spars_m": {
+            "visible": true,
+            "opacity": 1.0
+          },
+          "ribs": {
+            "visible": true,
+            "opacity": 1.0
+          },
+          "ribs_m": {
+            "visible": true,
+            "opacity": 1.0
+          },
+          "elevon": {
+            "visible": true,
+            "opacity": 1.0
+          },
+          "elevon_m": {
+            "visible": true,
+            "opacity": 0.5
+          },
+          "cutter": {
+            "visible": true,
+            "opacity": 1.0
+          },
+          "cutter_m": {
+            "visible": true,
+            "opacity": 1.0
+          }
+        }
+      }
+    }
+  }
+}

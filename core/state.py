@@ -121,15 +121,26 @@ class Project:
         from core.aircraft.surfaces import LiftingSurface
 
         migrated = LiftingSurface.from_legacy_wing(self.wing)
+        target_index = None
         for idx, surface in enumerate(self.aircraft.surfaces):
             if surface.uid == "main_wing":
-                migrated.transform = surface.transform
-                migrated.symmetry = surface.symmetry
-                migrated.local_span_axis = surface.local_span_axis
-                migrated.incidence_deg = surface.incidence_deg
-                migrated.external_refs.update(surface.external_refs)
-                self.aircraft.surfaces[idx] = migrated
+                target_index = idx
                 break
+        if target_index is None:
+            for idx, surface in enumerate(self.aircraft.surfaces):
+                role = surface.role.value if hasattr(surface.role, "value") else str(surface.role)
+                if role == "main_wing":
+                    target_index = idx
+                    break
+
+        if target_index is not None:
+            surface = self.aircraft.surfaces[target_index]
+            migrated.transform = surface.transform
+            migrated.symmetry = surface.symmetry
+            migrated.local_span_axis = surface.local_span_axis
+            migrated.incidence_deg = surface.incidence_deg
+            migrated.external_refs.update(surface.external_refs)
+            self.aircraft.surfaces[target_index] = migrated
         else:
             self.aircraft.surfaces.insert(0, migrated)
         self.aircraft.reference.reference_area_m2 = self.wing.planform.actual_area()

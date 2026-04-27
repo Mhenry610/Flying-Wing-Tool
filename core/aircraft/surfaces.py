@@ -49,6 +49,9 @@ class SurfaceAnalysisSettings:
     cd0: float = 0.018
     oswald_efficiency: float = 0.82
     cl_max: float = 1.2
+    design_cl: float = 0.45
+    lift_distribution: str = "bell"
+    trim_lift_direction: str = "auto"
     active_in_aero: bool = True
     warnings: list[str] = field(default_factory=list)
 
@@ -60,6 +63,9 @@ class SurfaceAnalysisSettings:
             "cd0": self.cd0,
             "oswald_efficiency": self.oswald_efficiency,
             "cl_max": self.cl_max,
+            "design_cl": self.design_cl,
+            "lift_distribution": self.lift_distribution,
+            "trim_lift_direction": self.trim_lift_direction,
             "active_in_aero": self.active_in_aero,
             "warnings": list(self.warnings),
         }
@@ -74,6 +80,9 @@ class SurfaceAnalysisSettings:
             cd0=float(data.get("cd0", 0.018)),
             oswald_efficiency=float(data.get("oswald_efficiency", 0.82)),
             cl_max=float(data.get("cl_max", 1.2)),
+            design_cl=float(data.get("design_cl", 0.45)),
+            lift_distribution=str(data.get("lift_distribution", "bell")),
+            trim_lift_direction=str(data.get("trim_lift_direction", "auto")),
             active_in_aero=bool(data.get("active_in_aero", True)),
             warnings=list(data.get("warnings", [])),
         )
@@ -173,6 +182,8 @@ class LiftingSurface:
                 cl_alpha_per_deg=(wing_project.twist_trim.cl_alpha_root_per_deg + wing_project.twist_trim.cl_alpha_tip_per_deg) / 2.0,
                 zero_lift_aoa_deg=(wing_project.twist_trim.zero_lift_aoa_root_deg + wing_project.twist_trim.zero_lift_aoa_tip_deg) / 2.0,
                 cm0=(wing_project.twist_trim.cm0_root + wing_project.twist_trim.cm0_tip) / 2.0,
+                design_cl=wing_project.twist_trim.design_cl,
+                lift_distribution=wing_project.twist_trim.lift_distribution,
                 cl_max=wing_project.twist_trim.estimated_cl_max,
             ),
             external_refs={"legacy_wing_project": wing_project.name},

@@ -787,10 +787,26 @@ class AeroSandboxService:
                     optimized_twist = base_twist
                     print("  Warning: Fallback also failed, using base twist")
             
-            return optimized_twist
+            return self._normalize_and_limit_twist(optimized_twist)
             
         finally:
             self.wing_project.optimized_twist_deg = original_opt_twist
+
+    def _normalize_and_limit_twist(self, twist_values) -> List[float]:
+        """Return geometric twist relative to root and bounded by the planform limit."""
+        values = [float(v) for v in twist_values]
+        if not values:
+            return values
+        root = values[0]
+        relative = [v - root for v in values]
+        limit = float(getattr(self.wing_project.planform, "max_tip_twist_deg", 0.0) or 0.0)
+        if limit <= 0.0:
+            return relative
+        peak = max(abs(v) for v in relative)
+        if peak > limit:
+            scale = limit / peak
+            relative = [v * scale for v in relative]
+        return relative
 
     def optimize_twist_for_trim(self) -> Tuple[List[float], float]:
         """

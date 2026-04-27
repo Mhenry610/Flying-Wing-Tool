@@ -54,51 +54,56 @@ class AnalysisTab(QWidget):
         # 1. Inputs Group
         input_group = QGroupBox("Analysis Inputs")
         il = QGridLayout(input_group)
+
+        il.addWidget(QLabel("Surface"), 0, 0)
+        self.surface_combo = QComboBox()
+        self.surface_combo.currentIndexChanged.connect(self._on_surface_combo_changed)
+        il.addWidget(self.surface_combo, 0, 1, 1, 3)
         
-        il.addWidget(QLabel("Airfoil Source"), 0, 0)
+        il.addWidget(QLabel("Airfoil Source"), 1, 0)
         self.source_combo = QComboBox()
         self.source_combo.addItems(["Root Airfoil", "Tip Airfoil", "Custom"])
         self.source_combo.currentTextChanged.connect(self._on_source_changed)
-        il.addWidget(self.source_combo, 0, 1, 1, 3)
+        il.addWidget(self.source_combo, 1, 1, 1, 3)
         
-        il.addWidget(QLabel("Airfoil Name/Path"), 1, 0)
+        il.addWidget(QLabel("Airfoil Name/Path"), 2, 0)
         self.airfoil_edit = QLineEdit()
         self.airfoil_edit.setPlaceholderText("e.g. naca2412 or path/to/file.dat")
-        il.addWidget(self.airfoil_edit, 1, 1, 1, 3)
+        il.addWidget(self.airfoil_edit, 2, 1, 1, 3)
         
         # Alpha Range
-        il.addWidget(QLabel("Alpha Min [deg]"), 2, 0)
+        il.addWidget(QLabel("Alpha Min [deg]"), 3, 0)
         self.a_min = QDoubleSpinBox(); self.a_min.setRange(-90, 90); self.a_min.setValue(-5.0)
-        il.addWidget(self.a_min, 2, 1)
+        il.addWidget(self.a_min, 3, 1)
         
-        il.addWidget(QLabel("Alpha Max [deg]"), 2, 2)
+        il.addWidget(QLabel("Alpha Max [deg]"), 3, 2)
         self.a_max = QDoubleSpinBox(); self.a_max.setRange(-90, 90); self.a_max.setValue(15.0)
-        il.addWidget(self.a_max, 2, 3)
+        il.addWidget(self.a_max, 3, 3)
         
-        il.addWidget(QLabel("Points"), 3, 0)
+        il.addWidget(QLabel("Points"), 4, 0)
         self.a_pts = QSpinBox(); self.a_pts.setRange(5, 200); self.a_pts.setValue(40)
-        il.addWidget(self.a_pts, 3, 1)
+        il.addWidget(self.a_pts, 4, 1)
         
         # Re Range
-        il.addWidget(QLabel("Re Min"), 4, 0)
+        il.addWidget(QLabel("Re Min"), 5, 0)
         self.re_min = QDoubleSpinBox(); self.re_min.setRange(1e3, 1e8); self.re_min.setValue(1e4); self.re_min.setDecimals(0)
-        il.addWidget(self.re_min, 4, 1)
+        il.addWidget(self.re_min, 5, 1)
         
-        il.addWidget(QLabel("Re Max"), 4, 2)
+        il.addWidget(QLabel("Re Max"), 5, 2)
         self.re_max = QDoubleSpinBox(); self.re_max.setRange(1e3, 1e9); self.re_max.setValue(5e6); self.re_max.setDecimals(0)
-        il.addWidget(self.re_max, 4, 3)
+        il.addWidget(self.re_max, 5, 3)
         
-        il.addWidget(QLabel("Points"), 5, 0)
+        il.addWidget(QLabel("Points"), 6, 0)
         self.re_pts = QSpinBox(); self.re_pts.setRange(5, 200); self.re_pts.setValue(40)
-        il.addWidget(self.re_pts, 5, 1)
+        il.addWidget(self.re_pts, 6, 1)
         
-        il.addWidget(QLabel("Mach"), 6, 0)
+        il.addWidget(QLabel("Mach"), 7, 0)
         self.mach = QDoubleSpinBox(); self.mach.setRange(0, 0.95); self.mach.setValue(0.0); self.mach.setSingleStep(0.05)
-        il.addWidget(self.mach, 6, 1)
+        il.addWidget(self.mach, 7, 1)
         
         run_btn = QPushButton("Run NeuralFoil Sweep")
         run_btn.clicked.connect(self.run_sweep)
-        il.addWidget(run_btn, 7, 0, 1, 4)
+        il.addWidget(run_btn, 8, 0, 1, 4)
         
         controls_layout.addWidget(input_group)
         
@@ -215,15 +220,35 @@ class AnalysisTab(QWidget):
         self.update_from_project()
 
     def _on_source_changed(self, text: str):
+        surface = self._selected_surface()
         if text == "Root Airfoil":
-            self.airfoil_edit.setText(self.project.wing.airfoil.root_airfoil)
+            self.airfoil_edit.setText(surface.airfoils.root_airfoil if surface else self.project.wing.airfoil.root_airfoil)
             self.airfoil_edit.setEnabled(False)
         elif text == "Tip Airfoil":
-            self.airfoil_edit.setText(self.project.wing.airfoil.tip_airfoil)
+            self.airfoil_edit.setText(surface.airfoils.tip_airfoil if surface else self.project.wing.airfoil.tip_airfoil)
             self.airfoil_edit.setEnabled(False)
         else:
             self.airfoil_edit.setEnabled(True)
             self.airfoil_edit.setFocus()
+
+    def _on_surface_combo_changed(self, *_args):
+        settings = getattr(self.project.analysis, "gui_settings", None)
+        if settings is None:
+            self.project.analysis.gui_settings = {}
+            settings = self.project.analysis.gui_settings
+        selected_uid = self.surface_combo.currentData()
+        settings["selected_lifting_surface_uid"] = selected_uid
+        analysis_settings = settings.setdefault("analysis_tab", {})
+        if isinstance(analysis_settings, dict):
+            analysis_settings["surface_uid"] = selected_uid
+        self._on_source_changed(self.source_combo.currentText())
+
+    def _selected_surface(self):
+        uid = self.surface_combo.currentData() if hasattr(self, "surface_combo") else None
+        for surface in self.project.aircraft.surfaces:
+            if surface.uid == uid:
+                return surface
+        return self.project.aircraft.surfaces[0] if self.project.aircraft.surfaces else None
 
     def run_sweep(self):
         try:
@@ -417,15 +442,29 @@ class AnalysisTab(QWidget):
         self.canvas.draw_idle()
 
     def update_from_project(self):
-        settings = getattr(self.project.analysis, "gui_settings", {}).get("analysis_tab", {})
+        current = self.surface_combo.currentData()
+        self.surface_combo.blockSignals(True)
+        self.surface_combo.clear()
+        for surface in self.project.aircraft.surfaces:
+            self.surface_combo.addItem(f"{surface.name} ({surface.uid})", surface.uid)
+        if current:
+            idx = self.surface_combo.findData(current)
+            if idx >= 0:
+                self.surface_combo.setCurrentIndex(idx)
+        self.surface_combo.blockSignals(False)
+
+        all_settings = getattr(self.project.analysis, "gui_settings", {})
+        settings = all_settings.get("analysis_tab", {})
         if settings:
             self._apply_gui_settings(settings)
+        selected_uid = settings.get("surface_uid") or all_settings.get("selected_lifting_surface_uid")
+        if selected_uid is not None:
+            idx = self.surface_combo.findData(str(selected_uid))
+            if idx >= 0:
+                self.surface_combo.setCurrentIndex(idx)
 
         # Refresh airfoil names if they changed
-        if self.source_combo.currentText() == "Root Airfoil":
-            self.airfoil_edit.setText(self.project.wing.airfoil.root_airfoil)
-        elif self.source_combo.currentText() == "Tip Airfoil":
-            self.airfoil_edit.setText(self.project.wing.airfoil.tip_airfoil)
+        self._on_source_changed(self.source_combo.currentText())
 
     def sync_to_project(self):
         if self.project is None:
@@ -439,6 +478,7 @@ class AnalysisTab(QWidget):
     def _collect_gui_settings(self) -> Dict[str, Any]:
         return {
             "airfoil_source": self.source_combo.currentText(),
+            "surface_uid": self.surface_combo.currentData(),
             "airfoil_text": self.airfoil_edit.text(),
             "alpha_min_deg": float(self.a_min.value()),
             "alpha_max_deg": float(self.a_max.value()),
@@ -488,6 +528,11 @@ class AnalysisTab(QWidget):
                 check.setChecked(bool(value))
 
         _set_combo(self.source_combo, settings.get("airfoil_source"))
+        surface_uid = settings.get("surface_uid")
+        if surface_uid is not None:
+            idx = self.surface_combo.findData(str(surface_uid))
+            if idx >= 0:
+                self.surface_combo.setCurrentIndex(idx)
         if self.source_combo.currentText() == "Custom":
             self.airfoil_edit.setText(str(settings.get("airfoil_text", "")))
         _set_spin(self.a_min, settings.get("alpha_min_deg"))
@@ -525,6 +570,11 @@ class AnalysisWorkspace(QTabWidget):
         self.addTab(self.twist_tab, "Twist & Trim")
         self.addTab(self.performance_tab, "Performance")
         self.addTab(self.airfoil_analysis_tab, "2D Airfoil Study")
+        self.currentChanged.connect(lambda *_: self.update_from_project())
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.update_from_project()
 
     def update_from_project(self):
         for tab in self._tabs():
