@@ -1387,6 +1387,12 @@ class LiftingSurfacesTab(QWidget):
         self.area_spin = _double_spin(0.001, 1000.0, 0.01, 4)
         self.ar_spin = _double_spin(0.1, 50.0, 0.1, 3)
         self.taper_spin = _double_spin(0.01, 2.0, 0.01, 3)
+        self.chord_mode_combo = QComboBox()
+        self.chord_mode_combo.addItem("Linear taper", "linear_taper")
+        self.chord_mode_combo.addItem("Elliptical chord lift", "elliptical")
+        self.chord_mode_combo.addItem("Bell chord lift", "bell")
+        self.tip_floor_spin = _double_spin(0.0, 50.0, 1.0, 2)
+        self.split_chord_offsets_check = QCheckBox("Split chord offsets LE/TE")
         self.sweep_spin = _double_spin(-80.0, 80.0, 0.5, 2)
         self.dihedral_spin = _double_spin(-45.0, 45.0, 0.5, 2)
         self.front_spar_root_spin = _double_spin(0.0, 100.0, 1.0, 2)
@@ -1401,7 +1407,18 @@ class LiftingSurfacesTab(QWidget):
         self.sections_spin = QSpinBox()
         self.sections_spin.setRange(2, 200)
         self.sections_spin.setSingleStep(1)
+        self.center_linear_check = QCheckBox("Linear center extension")
         self.snap_check = QCheckBox("Snap sections")
+
+        airfoil_group = QGroupBox("Airfoils")
+        airfoil_form = QFormLayout(airfoil_group)
+        self.bwb_airfoil_edit = QLineEdit()
+        self.root_airfoil_edit = QLineEdit()
+        self.tip_airfoil_edit = QLineEdit()
+        airfoil_form.addRow("BWB airfoil", self.bwb_airfoil_edit)
+        airfoil_form.addRow("Root airfoil", self.root_airfoil_edit)
+        airfoil_form.addRow("Tip airfoil", self.tip_airfoil_edit)
+        content_layout.addWidget(airfoil_group)
 
         for label, widget in (
             ("UID", self.uid_edit),
@@ -1426,6 +1443,9 @@ class LiftingSurfacesTab(QWidget):
             ("Area [m^2]", self.area_spin),
             ("Aspect ratio", self.ar_spin),
             ("Taper ratio", self.taper_spin),
+            ("Chord setup", self.chord_mode_combo),
+            ("Tip chord floor [%]", self.tip_floor_spin),
+            ("Chord offset split", self.split_chord_offsets_check),
             ("Sweep LE [deg]", self.sweep_spin),
             ("Dihedral [deg]", self.dihedral_spin),
             ("Front spar root [%]", self.front_spar_root_spin),
@@ -1435,6 +1455,7 @@ class LiftingSurfacesTab(QWidget):
             ("Rear spar span [%]", self.rear_spar_span_spin),
             ("Center chord ext [% root]", self.center_ext_spin),
             ("Center span [% half-span]", self.center_span_spin),
+            ("Center extension", self.center_linear_check),
             ("BWB blend [% span]", self.bwb_blend_spin),
             ("BWB dihedral [deg]", self.bwb_dihedral_spin),
             ("Sections / ribs", self.sections_spin),
@@ -1442,6 +1463,25 @@ class LiftingSurfacesTab(QWidget):
         ):
             planform_form.addRow(label, widget)
         content_layout.addWidget(planform_group)
+
+        bwb_group = QGroupBox("BWB Body Sections")
+        bwb_layout = QVBoxLayout(bwb_group)
+        self.bwb_table = QTableWidget()
+        self.bwb_table.setColumnCount(5)
+        self.bwb_table.setHorizontalHeaderLabels(["Y Pos [m]", "Chord [m]", "X Offset [m]", "Z Offset [m]", "Airfoil"])
+        self.bwb_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.bwb_table.itemChanged.connect(self._on_bwb_table_changed)
+        bwb_layout.addWidget(self.bwb_table)
+        bwb_btn_row = QHBoxLayout()
+        bwb_add_btn = QPushButton("Add Section")
+        bwb_add_btn.clicked.connect(self._add_bwb_section)
+        bwb_btn_row.addWidget(bwb_add_btn)
+        bwb_remove_btn = QPushButton("Remove Selected")
+        bwb_remove_btn.clicked.connect(self._remove_bwb_section)
+        bwb_btn_row.addWidget(bwb_remove_btn)
+        bwb_btn_row.addStretch()
+        bwb_layout.addLayout(bwb_btn_row)
+        content_layout.addWidget(bwb_group)
 
         cs_group = QGroupBox("Control Surfaces")
         cs_layout = QVBoxLayout(cs_group)
@@ -1466,14 +1506,16 @@ class LiftingSurfacesTab(QWidget):
         content_layout.addWidget(cs_group)
 
         for widget in (
-            self.uid_edit, self.name_edit, self.symmetry_combo, self.axis_combo,
+            self.uid_edit, self.name_edit, self.bwb_airfoil_edit, self.root_airfoil_edit, self.tip_airfoil_edit,
+            self.symmetry_combo, self.axis_combo,
             self.parent_combo, self.vertical_mode_combo,
             self.active_check, self.x_spin, self.y_spin, self.z_spin, self.incidence_spin,
-            self.area_spin, self.ar_spin, self.taper_spin, self.sweep_spin, self.dihedral_spin,
+            self.area_spin, self.ar_spin, self.taper_spin, self.chord_mode_combo, self.tip_floor_spin,
+            self.split_chord_offsets_check, self.sweep_spin, self.dihedral_spin,
             self.front_spar_root_spin, self.front_spar_tip_spin, self.rear_spar_root_spin,
             self.rear_spar_tip_spin, self.rear_spar_span_spin, self.center_ext_spin,
             self.center_span_spin, self.bwb_blend_spin, self.bwb_dihedral_spin,
-            self.sections_spin, self.snap_check,
+            self.sections_spin, self.center_linear_check, self.snap_check,
         ):
             if hasattr(widget, "editingFinished"):
                 widget.editingFinished.connect(self._write_current_surface)
@@ -1591,6 +1633,10 @@ class LiftingSurfacesTab(QWidget):
         self.parent_combo.setEnabled(is_winglet)
         self.vertical_mode_combo.setEnabled(is_vertical)
         self.area_spin.setEnabled(not is_winglet)
+        chord_mode = self.chord_mode_combo.currentData() or "linear_taper"
+        self.taper_spin.setEnabled(chord_mode == "linear_taper")
+        self.tip_floor_spin.setEnabled(chord_mode != "linear_taper")
+        self.split_chord_offsets_check.setEnabled(chord_mode != "linear_taper")
 
     def _apply_winglet_constraints(self, surface: LiftingSurface) -> None:
         if _value(surface.role) != SurfaceRole.WINGLET.value:
@@ -1603,7 +1649,7 @@ class LiftingSurfacesTab(QWidget):
         parent_x, parent_y, parent_z = parent.transform.origin_m
         parent_half_span = parent_plan.half_span()
         parent_tip_chord = parent_plan.tip_chord()
-        parent_tip_x = parent_x + math.tan(math.radians(parent_plan.sweep_le_deg)) * parent_half_span
+        parent_tip_x = parent_x + math.tan(math.radians(parent_plan.sweep_le_deg)) * parent_half_span + parent_plan.leading_edge_offset_at_span_fraction(1.0)
         parent_tip_y = parent_y + parent_half_span
         parent_tip_z = parent_z + math.tan(math.radians(parent_plan.dihedral_deg)) * parent_half_span
 
@@ -1621,7 +1667,7 @@ class LiftingSurfacesTab(QWidget):
         surface.planform.aspect_ratio = aspect_ratio
         surface.planform.center_chord_extension_percent = 0.0
         surface.planform.center_section_span_percent = 0.0
-        surface.planform.wing_area_m2 = (parent_tip_chord ** 2) * aspect_ratio * ((1.0 + taper) ** 2) / 4.0
+        surface.planform.wing_area_m2 = surface.planform.area_for_root_chord(parent_tip_chord)
         surface.planform.reset_cache()
 
     def _apply_all_winglet_constraints(self) -> None:
@@ -1638,8 +1684,12 @@ class LiftingSurfacesTab(QWidget):
         self.area_spin.setValue(surface.planform.wing_area_m2)
         self.ar_spin.setValue(surface.planform.aspect_ratio)
         self.taper_spin.setValue(surface.planform.taper_ratio)
+        _set_combo_by_data(self.chord_mode_combo, surface.planform.chord_distribution_mode)
+        self.tip_floor_spin.setValue(surface.planform.chord_distribution_tip_floor_percent)
+        self.split_chord_offsets_check.setChecked(surface.planform.split_chord_distribution_offsets)
         self.center_ext_spin.setValue(surface.planform.center_chord_extension_percent)
         self.center_span_spin.setValue(surface.planform.center_section_span_percent)
+        self.center_linear_check.setChecked(surface.planform.center_extension_linear)
         self.sections_spin.setValue(max(2, int(getattr(surface.airfoils, "num_sections", 13) or 13)))
         self._loading = False
 
@@ -1667,10 +1717,16 @@ class LiftingSurfacesTab(QWidget):
         self.y_spin.setValue(surface.transform.origin_m[1])
         self.z_spin.setValue(surface.transform.origin_m[2])
         self.incidence_spin.setValue(surface.incidence_deg)
+        self.bwb_airfoil_edit.setText(surface.airfoils.bwb_airfoil)
+        self.root_airfoil_edit.setText(surface.airfoils.root_airfoil)
+        self.tip_airfoil_edit.setText(surface.airfoils.tip_airfoil)
         self.sections_spin.setValue(max(2, int(getattr(surface.airfoils, "num_sections", 13) or 13)))
         self.area_spin.setValue(surface.planform.wing_area_m2)
         self.ar_spin.setValue(surface.planform.aspect_ratio)
         self.taper_spin.setValue(surface.planform.taper_ratio)
+        _set_combo_by_data(self.chord_mode_combo, surface.planform.chord_distribution_mode)
+        self.tip_floor_spin.setValue(surface.planform.chord_distribution_tip_floor_percent)
+        self.split_chord_offsets_check.setChecked(surface.planform.split_chord_distribution_offsets)
         self.sweep_spin.setValue(surface.planform.sweep_le_deg)
         self.dihedral_spin.setValue(surface.planform.dihedral_deg)
         self.front_spar_root_spin.setValue(surface.planform.front_spar_root_percent)
@@ -1680,11 +1736,13 @@ class LiftingSurfacesTab(QWidget):
         self.rear_spar_span_spin.setValue(surface.planform.rear_spar_span_percent)
         self.center_ext_spin.setValue(surface.planform.center_chord_extension_percent)
         self.center_span_spin.setValue(surface.planform.center_section_span_percent)
+        self.center_linear_check.setChecked(surface.planform.center_extension_linear)
         self.bwb_blend_spin.setValue(surface.planform.bwb_blend_span_percent)
         self.bwb_dihedral_spin.setValue(surface.planform.bwb_dihedral_deg)
         self.snap_check.setChecked(surface.planform.snap_to_sections)
         self._update_vertical_controls(surface)
         self._loading = False
+        self._update_bwb_table()
         self._update_cs_table()
         self._update_summary_and_plot(surface)
 
@@ -1735,6 +1793,9 @@ class LiftingSurfacesTab(QWidget):
         surface.planform.wing_area_m2 = self.area_spin.value()
         surface.planform.aspect_ratio = self.ar_spin.value()
         surface.planform.taper_ratio = self.taper_spin.value()
+        surface.planform.chord_distribution_mode = self.chord_mode_combo.currentData() or "linear_taper"
+        surface.planform.chord_distribution_tip_floor_percent = self.tip_floor_spin.value()
+        surface.planform.split_chord_distribution_offsets = self.split_chord_offsets_check.isChecked()
         surface.planform.sweep_le_deg = self.sweep_spin.value()
         surface.planform.dihedral_deg = self.dihedral_spin.value()
         surface.planform.front_spar_root_percent = self.front_spar_root_spin.value()
@@ -1744,10 +1805,15 @@ class LiftingSurfacesTab(QWidget):
         surface.planform.rear_spar_span_percent = self.rear_spar_span_spin.value()
         surface.planform.center_chord_extension_percent = self.center_ext_spin.value()
         surface.planform.center_section_span_percent = self.center_span_spin.value()
+        surface.planform.center_extension_linear = self.center_linear_check.isChecked()
         surface.planform.bwb_blend_span_percent = self.bwb_blend_spin.value()
         surface.planform.bwb_dihedral_deg = self.bwb_dihedral_spin.value()
         surface.planform.snap_to_sections = self.snap_check.isChecked()
+        surface.airfoils.bwb_airfoil = self.bwb_airfoil_edit.text().strip() or surface.airfoils.bwb_airfoil
+        surface.airfoils.root_airfoil = self.root_airfoil_edit.text().strip() or surface.airfoils.root_airfoil
+        surface.airfoils.tip_airfoil = self.tip_airfoil_edit.text().strip() or surface.airfoils.tip_airfoil
         surface.airfoils.num_sections = int(self.sections_spin.value())
+        self._sync_current_bwb_sections()
         surface.planform.reset_cache()
         if self._is_vertical_surface(surface):
             surface.external_refs["geometry_mode"] = self.vertical_mode_combo.currentData() or "full_geometry"
@@ -1828,12 +1894,24 @@ class LiftingSurfacesTab(QWidget):
         label = f"* {surface.name}" if selected else surface.name
 
         if axis in (Axis.Z.value, Axis.NEG_Z.value):
-            for station_index, y in enumerate(self._vertical_y_stations(surface)):
-                x0 = origin_x
-                x1 = origin_x + plan.root_chord()
+            mode = surface.external_refs.get("geometry_mode", "full_geometry")
+            for station_index, y_station in enumerate(self._vertical_y_stations(surface)):
                 station_label = label if station_index == 0 else f"{surface.name} mirror"
-                linestyle = "-" if station_index == 0 else "--"
-                ax.plot([y, y], [x0, x1], color=color, linewidth=linewidth, alpha=alpha, linestyle=linestyle, label=station_label)
+                if mode == "flat_plate":
+                    x0 = origin_x
+                    x1 = origin_x + plan.root_chord()
+                    linestyle = "-" if station_index == 0 else "--"
+                    ax.plot([y_station, y_station], [x0, x1], color=color, linewidth=linewidth, alpha=alpha, linestyle=linestyle, label=station_label)
+                else:
+                    self._plot_vertical_surface_top_sections(
+                        ax,
+                        surface,
+                        y_station=y_station,
+                        color=color,
+                        selected=selected,
+                        label=station_label,
+                        mirrored=station_index > 0,
+                    )
             return
 
         sections = self._surface_sections(surface)
@@ -1914,6 +1992,76 @@ class LiftingSurfacesTab(QWidget):
         if _value(surface.symmetry) == SymmetryMode.MIRRORED_ABOUT_XZ.value and abs(y) > 1e-9:
             return [y, -y]
         return [y]
+
+    def _plot_vertical_surface_top_sections(
+        self,
+        ax,
+        surface: LiftingSurface,
+        y_station: float,
+        color: str,
+        selected: bool,
+        label: str,
+        mirrored: bool,
+    ) -> None:
+        x0, _origin_y, _z0 = surface.transform.origin_m
+        sections = self._surface_sections(surface)
+        linewidth = 1.1 if selected else 0.75
+        alpha = 0.85 if selected else 0.5
+        linestyle = "--" if mirrored else "-"
+        thickness_sign = -1.0 if mirrored else 1.0
+
+        try:
+            from core.naca_generator.naca456 import generate_naca_airfoil
+
+            root_name = surface.airfoils.root_airfoil.lower().replace("naca", "").strip()
+            tip_name = surface.airfoils.tip_airfoil.lower().replace("naca", "").strip()
+            x_root, y_root = generate_naca_airfoil(root_name, n_points=80)
+            x_tip, y_tip = generate_naca_airfoil(tip_name, n_points=80)
+            step = max(1, len(sections) // 9)
+            plotted_label = False
+            incidence = math.radians(surface.incidence_deg)
+            for section in sections[::step]:
+                eta = section["eta"]
+                chord = section["chord"]
+                x_profile = x_root * (1.0 - eta) + x_tip * eta
+                y_profile = y_root * (1.0 - eta) + y_tip * eta
+                x_le = x0 + section["x_le"]
+                plot_y = []
+                plot_x = []
+                for xi, yi in zip(x_profile, y_profile):
+                    local_x = float(xi) * chord
+                    local_y = float(yi) * chord
+                    x_global = x_le + local_x * math.cos(incidence) - local_y * math.sin(incidence)
+                    y_global = y_station + thickness_sign * (local_x * math.sin(incidence) + local_y * math.cos(incidence))
+                    plot_y.append(y_global)
+                    plot_x.append(x_global)
+                ax.plot(
+                    plot_y,
+                    plot_x,
+                    color=color,
+                    linewidth=linewidth,
+                    alpha=alpha,
+                    linestyle=linestyle,
+                    label=label if not plotted_label else None,
+                )
+                plotted_label = True
+        except Exception:
+            step = max(1, len(sections) // 9)
+            plotted_label = False
+            for section in sections[::step]:
+                chord = section["chord"]
+                thickness = 0.08 * chord
+                x_le = x0 + section["x_le"]
+                plot_y = [
+                    y_station - thickness_sign * thickness / 2.0,
+                    y_station + thickness_sign * thickness / 2.0,
+                    y_station + thickness_sign * thickness / 2.0,
+                    y_station - thickness_sign * thickness / 2.0,
+                    y_station - thickness_sign * thickness / 2.0,
+                ]
+                plot_x = [x_le, x_le, x_le + chord, x_le + chord, x_le]
+                ax.plot(plot_y, plot_x, color=color, linewidth=linewidth, alpha=alpha, linestyle=linestyle, label=label if not plotted_label else None)
+                plotted_label = True
 
     def _plot_vertical_surface_side(self, ax, surface: LiftingSurface, color: str, selected: bool) -> None:
         mode = surface.external_refs.get("geometry_mode", "full_geometry")
@@ -2013,13 +2161,14 @@ class LiftingSurfacesTab(QWidget):
         n = max(3, int(getattr(surface.airfoils, "num_sections", 13) or 13))
         half_span = plan.half_span()
         root = plan.extended_root_chord()
-        tip = plan.tip_chord()
         sections = []
         for i in range(n):
             eta = i / (n - 1)
             y = half_span * eta
-            chord = root + (tip - root) * eta
-            x_le = math.tan(math.radians(plan.sweep_le_deg)) * y
+            chord = plan.chord_at_span_fraction(eta)
+            if eta == 0.0 and plan.center_chord_extension_percent > 0:
+                chord = root
+            x_le = math.tan(math.radians(plan.sweep_le_deg)) * y + plan.leading_edge_offset_at_span_fraction(eta)
             sections.append(
                 {
                     "eta": eta,
@@ -2046,6 +2195,75 @@ class LiftingSurfacesTab(QWidget):
                     for key in ("eta", "y", "x_le", "chord", "front_frac", "rear_frac")
                 }
         return dict(sections[-1])
+
+    def _update_bwb_table(self) -> None:
+        surface = self._current_surface()
+        if surface is None:
+            return
+        self._loading = True
+        sections = surface.planform.body_sections
+        self.bwb_table.setRowCount(len(sections))
+        for row, section in enumerate(sections):
+            values = [section.y_pos, section.chord, section.x_offset, section.z_offset, section.airfoil]
+            for col, value in enumerate(values):
+                self.bwb_table.setItem(row, col, QTableWidgetItem(f"{value:.3f}" if isinstance(value, float) else str(value)))
+        self._loading = False
+
+    def _sync_current_bwb_sections(self) -> None:
+        surface = self._current_surface()
+        if surface is None:
+            return
+        sections = []
+        for row in range(self.bwb_table.rowCount()):
+            try:
+                sections.append(
+                    BodySection(
+                        y_pos=float(_table_text(self.bwb_table, row, 0, "0")),
+                        chord=float(_table_text(self.bwb_table, row, 1, "1")),
+                        x_offset=float(_table_text(self.bwb_table, row, 2, "0")),
+                        z_offset=float(_table_text(self.bwb_table, row, 3, "0")),
+                        airfoil=_table_text(self.bwb_table, row, 4, surface.airfoils.bwb_airfoil),
+                    )
+                )
+            except ValueError:
+                continue
+        surface.planform.body_sections = sections
+
+    def _on_bwb_table_changed(self, item: QTableWidgetItem) -> None:
+        if self._loading:
+            return
+        self._sync_current_bwb_sections()
+        surface = self._current_surface()
+        if surface is not None:
+            surface.planform.reset_cache()
+            self._update_summary_and_plot(surface)
+
+    def _add_bwb_section(self) -> None:
+        surface = self._current_surface()
+        if surface is None:
+            return
+        next_y = max([section.y_pos for section in surface.planform.body_sections], default=-0.5) + 0.5
+        surface.planform.body_sections.append(
+            BodySection(
+                y_pos=next_y,
+                chord=max(0.05, surface.planform.root_chord()),
+                x_offset=0.0,
+                z_offset=0.0,
+                airfoil=surface.airfoils.bwb_airfoil,
+            )
+        )
+        surface.planform.reset_cache()
+        self._update_bwb_table()
+        self._update_summary_and_plot(surface)
+
+    def _remove_bwb_section(self) -> None:
+        surface = self._current_surface()
+        row = self.bwb_table.currentRow()
+        if surface is not None and 0 <= row < len(surface.planform.body_sections):
+            surface.planform.body_sections.pop(row)
+            surface.planform.reset_cache()
+            self._update_bwb_table()
+            self._update_summary_and_plot(surface)
 
     def _update_cs_table(self) -> None:
         surface = self._current_surface()
@@ -2559,13 +2777,14 @@ def _surface_sections_for_plot(surface: LiftingSurface) -> List[dict]:
     n = max(3, int(getattr(surface.airfoils, "num_sections", 13) or 13))
     half_span = plan.half_span()
     root = plan.extended_root_chord()
-    tip = plan.tip_chord()
     sections = []
     for i in range(n):
         eta = i / (n - 1)
         y = half_span * eta
-        chord = root + (tip - root) * eta
-        x_le = math.tan(math.radians(plan.sweep_le_deg)) * y
+        chord = plan.chord_at_span_fraction(eta)
+        if eta == 0.0 and plan.center_chord_extension_percent > 0:
+            chord = root
+        x_le = math.tan(math.radians(plan.sweep_le_deg)) * y + plan.leading_edge_offset_at_span_fraction(eta)
         sections.append(
             {
                 "eta": eta,

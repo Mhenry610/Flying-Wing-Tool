@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from typing import Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -75,6 +76,9 @@ class PlanformGeometry:
     wing_area_m2: float = 15.0
     aspect_ratio: float = 7.5
     taper_ratio: float = 0.4
+    chord_distribution_mode: str = "linear_taper"  # linear_taper, elliptical, bell
+    chord_distribution_tip_floor_percent: float = 5.0
+    split_chord_distribution_offsets: bool = False
     sweep_le_deg: float = 20.0
     dihedral_deg: float = 2.0
     elevon_root_span_percent: float = 40.0
@@ -201,15 +205,37 @@ class PlanformGeometry:
 
     def mean_aerodynamic_chord(self) -> float:
         if "mac" not in self.cache:
-            root = self.root_chord()
-            tip = self.tip_chord()
-            self.cache["mac"] = (2.0 / 3.0) * root * (1 + self.taper_ratio + self.taper_ratio ** 2) / (1 + self.taper_ratio)
+            if self.chord_distribution_mode == "linear_taper":
+                root = self.root_chord()
+                tip = self.tip_chord()
+                self.cache["mac"] = (2.0 / 3.0) * root * (1 + self.taper_ratio + self.taper_ratio ** 2) / (1 + self.taper_ratio)
+            else:
+                samples = 101
+                half_span = self.half_span()
+                if half_span <= 0:
+                    self.cache["mac"] = 0.0
+                else:
+                    integral_c2 = 0.0
+                    integral_c = 0.0
+                    prev_eta = 0.0
+                    prev_c = self.chord_at_span_fraction(prev_eta)
+                    for i in range(1, samples):
+                        eta = i / (samples - 1)
+                        chord = self.chord_at_span_fraction(eta)
+                        dy = (eta - prev_eta) * half_span
+                        integral_c2 += 0.5 * dy * (prev_c ** 2 + chord ** 2)
+                        integral_c += 0.5 * dy * (prev_c + chord)
+                        prev_eta = eta
+                        prev_c = chord
+                    self.cache["mac"] = integral_c2 / max(integral_c, 1e-9)
         return self.cache["mac"]
 
     def root_chord(self) -> float:
         if "c_root" not in self.cache:
-            span = self.span()
-            self.cache["c_root"] = 2 * self.wing_area_m2 / (span * (1 + self.taper_ratio))
+            if self.chord_distribution_mode == "linear_taper":
+                self.cache["c_root"] = self.linear_root_chord()
+            else:
+                self.cache["c_root"] = self.chord_at_span_fraction(0.0)
         return self.cache["c_root"]
 
     def extended_root_chord(self) -> float:
@@ -220,7 +246,80 @@ class PlanformGeometry:
         return base
 
     def tip_chord(self) -> float:
-        return self.root_chord() * self.taper_ratio
+        if self.chord_distribution_mode == "linear_taper":
+            return self.root_chord() * self.taper_ratio
+        return self.chord_at_span_fraction(1.0)
+
+    def chord_at_span_fraction(self, eta: float) -> float:
+        eta = max(0.0, min(1.0, float(eta)))
+        mode = str(self.chord_distribution_mode or "linear_taper").lower()
+        if mode == "linear_taper":
+            return self.linear_chord_at_span_fraction(eta)
+
+        half_span = self.half_span()
+        if half_span <= 0:
+            return 0.0
+        floor = max(0.0, float(self.chord_distribution_tip_floor_percent)) / 100.0
+        scale = self._chord_distribution_scale(mode, floor)
+        return scale * self._chord_distribution_shape(mode, eta, floor)
+
+    def linear_root_chord(self) -> float:
+        span = self.span()
+        return 2 * self.wing_area_m2 / max(span * (1 + self.taper_ratio), 1e-9)
+
+    def linear_chord_at_span_fraction(self, eta: float) -> float:
+        eta = max(0.0, min(1.0, float(eta)))
+        return self.linear_root_chord() * (1 - (1 - self.taper_ratio) * eta)
+
+    def leading_edge_offset_at_span_fraction(self, eta: float) -> float:
+        mode = str(self.chord_distribution_mode or "linear_taper").lower()
+        if mode == "linear_taper" or not self.split_chord_distribution_offsets:
+            return 0.0
+        return -0.5 * (self.chord_at_span_fraction(eta) - self.linear_chord_at_span_fraction(eta))
+
+    def _chord_distribution_shape(self, mode: str, eta: float, floor: float) -> float:
+        if mode == "bell":
+            target = max(0.0, 1.0 - eta ** 2) ** 1.5
+        else:
+            target = math.sqrt(max(0.0, 1.0 - eta ** 2))
+        return max(floor, target)
+
+    def _chord_distribution_scale(self, mode: str, floor: float) -> float:
+        cache_key = f"chord_scale_{mode}_{floor:.6f}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        samples = 401
+        integral = 0.0
+        prev_eta = 0.0
+        prev_shape = self._chord_distribution_shape(mode, prev_eta, floor)
+        for i in range(1, samples):
+            eta = i / (samples - 1)
+            shape = self._chord_distribution_shape(mode, eta, floor)
+            integral += 0.5 * (eta - prev_eta) * (prev_shape + shape)
+            prev_eta = eta
+            prev_shape = shape
+        half_span = self.half_span()
+        self.cache[cache_key] = (self.wing_area_m2 / 2.0) / max(half_span * integral, 1e-9)
+        return self.cache[cache_key]
+
+    def area_for_root_chord(self, root_chord_m: float) -> float:
+        root_chord_m = max(0.0, float(root_chord_m))
+        mode = str(self.chord_distribution_mode or "linear_taper").lower()
+        if mode == "linear_taper":
+            return (root_chord_m ** 2) * self.aspect_ratio * ((1.0 + self.taper_ratio) ** 2) / 4.0
+
+        floor = max(0.0, float(self.chord_distribution_tip_floor_percent)) / 100.0
+        samples = 401
+        integral = 0.0
+        prev_eta = 0.0
+        prev_shape = self._chord_distribution_shape(mode, prev_eta, floor)
+        for i in range(1, samples):
+            eta = i / (samples - 1)
+            shape = self._chord_distribution_shape(mode, eta, floor)
+            integral += 0.5 * (eta - prev_eta) * (prev_shape + shape)
+            prev_eta = eta
+            prev_shape = shape
+        return self.aspect_ratio * (integral * root_chord_m) ** 2
 
     def reset_cache(self) -> None:
         self.cache.clear()
@@ -230,6 +329,9 @@ class PlanformGeometry:
             "wing_area_m2": self.wing_area_m2,
             "aspect_ratio": self.aspect_ratio,
             "taper_ratio": self.taper_ratio,
+            "chord_distribution_mode": self.chord_distribution_mode,
+            "chord_distribution_tip_floor_percent": self.chord_distribution_tip_floor_percent,
+            "split_chord_distribution_offsets": self.split_chord_distribution_offsets,
             "sweep_le_deg": self.sweep_le_deg,
             "dihedral_deg": self.dihedral_deg,
             "elevon_root_span_percent": self.elevon_root_span_percent,

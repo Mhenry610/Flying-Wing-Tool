@@ -442,8 +442,7 @@ class AeroSandboxService:
             # Chord calculation
             if bwb_mode:
                 # Independent wing geometry with blend region
-                wing_root = plan.root_chord()  # Wing's own root chord
-                wing_tip = plan.tip_chord()
+                target_chord = plan.chord_at_span_fraction(wing_local_frac)
                 
                 # Blend region: interpolate from BWB outer chord to wing root chord
                 blend_span = wing_half_span * (plan.bwb_blend_span_percent / 100.0)
@@ -454,19 +453,15 @@ class AeroSandboxService:
                     blend_frac = wing_y_from_junction / blend_span
                     # Cosine blend for smooth transition
                     blend_weight = 0.5 * (1 - np.cos(np.pi * blend_frac))
-                    effective_root = bwb_outer_chord + (wing_root - bwb_outer_chord) * blend_weight
+                    chord = bwb_outer_chord + (target_chord - bwb_outer_chord) * blend_weight
                 else:
-                    # Beyond blend region - use pure wing geometry
-                    effective_root = wing_root
-                
-                # Calculate wing local fraction for taper (0=junction, 1=tip)
-                chord = effective_root + (wing_tip - effective_root) * wing_local_frac
+                    chord = target_chord
                 
                 # X leading edge: continue sweep from BWB junction
-                x_le = bwb_outer_x_offset + np.tan(sweep_rad) * (y - bwb_outer_y)
+                x_le = bwb_outer_x_offset + np.tan(sweep_rad) * (y - bwb_outer_y) + plan.leading_edge_offset_at_span_fraction(wing_local_frac)
             else:
-                chord = plan.root_chord() * (1 - (1 - taper) * span_fraction)
-                x_le = np.tan(sweep_rad) * y
+                chord = plan.chord_at_span_fraction(span_fraction)
+                x_le = np.tan(sweep_rad) * y + plan.leading_edge_offset_at_span_fraction(span_fraction)
             
             # Apply M-shaped trailing edge extension (only for non-BWB)
             if not bwb_mode:

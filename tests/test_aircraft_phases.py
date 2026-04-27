@@ -11,6 +11,7 @@ from core.aircraft import (
     twin_fin_rc_aircraft_preset,
 )
 from core.geometry import assemble_surface_instances
+from core.models.planform import PlanformGeometry
 from core.state import Project
 from core.structures import StructuralElement, StructuralElementType, StructuralLocation, StructuralSection
 from services.aircraft import MultiSurfaceAeroService, analyze_conceptual_structure, compute_mass_balance
@@ -38,6 +39,32 @@ class AircraftPhaseExitCriteriaTests(unittest.TestCase):
             self.assertIn(trim.exists, (True, False))
             stability = MultiSurfaceAeroService(aircraft).stability(airspeed_mps=18.0)
             self.assertIsNotNone(stability.dCm_dAlpha_per_deg)
+
+    def test_chordwise_lift_distribution_planform_modes_preserve_area(self):
+        linear = PlanformGeometry(wing_area_m2=1.0, aspect_ratio=6.0, taper_ratio=0.5)
+        elliptical = PlanformGeometry(
+            wing_area_m2=1.0,
+            aspect_ratio=6.0,
+            chord_distribution_mode="elliptical",
+            chord_distribution_tip_floor_percent=5.0,
+        )
+        bell = PlanformGeometry(
+            wing_area_m2=1.0,
+            aspect_ratio=6.0,
+            chord_distribution_mode="bell",
+            chord_distribution_tip_floor_percent=5.0,
+        )
+        self.assertGreater(linear.chord_at_span_fraction(1.0), elliptical.chord_at_span_fraction(1.0))
+        self.assertGreater(elliptical.chord_at_span_fraction(0.0), elliptical.chord_at_span_fraction(1.0))
+        self.assertGreater(bell.chord_at_span_fraction(0.5), bell.chord_at_span_fraction(1.0))
+        self.assertAlmostEqual(elliptical.area_for_root_chord(elliptical.root_chord()), elliptical.wing_area_m2, places=3)
+
+        eta = 0.5
+        baseline = elliptical.linear_chord_at_span_fraction(eta)
+        shifted = elliptical.chord_at_span_fraction(eta)
+        self.assertEqual(elliptical.leading_edge_offset_at_span_fraction(eta), 0.0)
+        elliptical.split_chord_distribution_offsets = True
+        self.assertAlmostEqual(elliptical.leading_edge_offset_at_span_fraction(eta), -0.5 * (shifted - baseline))
 
     def test_phase_3_generic_structure_supports_tube_spar_and_bracing(self):
         aircraft = conventional_rc_aircraft_preset()
